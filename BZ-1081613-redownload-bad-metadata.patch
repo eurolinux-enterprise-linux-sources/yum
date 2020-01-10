@@ -1,0 +1,97 @@
+diff -up yum-3.2.29/yum/yumRepo.py.old yum-3.2.29/yum/yumRepo.py
+--- yum-3.2.29/yum/yumRepo.py.old	2014-04-01 09:53:51.402515909 +0200
++++ yum-3.2.29/yum/yumRepo.py	2014-04-01 09:53:57.794521241 +0200
+@@ -807,6 +807,7 @@ class YumRepository(Repository, config.R
+                                     range=(start, end),
+                                     )
+             except URLGrabError, e:
++                self._del_dl_file(local, size)
+                 errstr = "failed to retrieve %s from %s\nerror was %s" % (relative, self.id, e)
+                 if self.mirrorurls:
+                     errstr +="\n  You could try running: yum clean expire-cache"
+@@ -830,6 +831,7 @@ class YumRepository(Repository, config.R
+                                            size=size
+                                            )
+             except URLGrabError, e:
++                self._del_dl_file(local, size)
+                 errstr = "failure: %s from %s: %s" % (relative, self.id, e)
+                 if e.errno == 256:
+                     raise Errors.NoMoreMirrorsRepoError, errstr
+@@ -1500,6 +1502,18 @@ class YumRepository(Repository, config.R
+             raise URLGrabError(-1, 'repomd.xml does not match metalink for %s' %
+                                self)
+ 
++    def _del_dl_file(self, local, size):
++        """ Delete a downloaded file if it's the correct size. """
++
++        sd = misc.stat_f(local)
++        if not sd: # File doesn't exist...
++            return
++
++        if size and sd.st_size < size:
++            return # Still more to get...
++
++        # Is the correct size, or too big ... delete it so we'll try again.
++        misc.unlink_f(local)
+ 
+     def checkMD(self, fn, mdtype, openchecksum=False):
+         """check the metadata type against its checksum"""
+@@ -1589,15 +1603,22 @@ class YumRepository(Repository, config.R
+                 return local # it's the same return the local one
+ 
+         try:
+-            checkfunc = (self.checkMD, (mdtype,), {})
++            def checkfunc(obj):
++                try:
++                    self.checkMD(obj, mdtype)
++                except URLGrabError:
++                    #  Don't share MD among mirrors, in theory we could use:
++                    #     self._del_dl_file(local, int(thisdata.size))
++                    # ...but this is safer.
++                    misc.unlink_f(obj.filename)
++                    raise
++                self.retrieved[mdtype] = 1
+             text = "%s/%s" % (self.id, mdtype)
+             if thisdata.size is None:
+                 reget = None
+             else:
+                 reget = 'simple'
+-                if os.path.exists(local):
+-                    if os.stat(local).st_size >= int(thisdata.size):
+-                        misc.unlink_f(local)
++                self._del_dl_file(local, int(thisdata.size))
+             local = self._getFile(relative=remote,
+                                   local=local, 
+                                   copy_local=1,
+@@ -1616,7 +1637,6 @@ class YumRepository(Repository, config.R
+             raise Errors.RepoError, \
+                 "Could not retrieve %s matching remote checksum from %s" % (local, self)
+         else:
+-            self.retrieved[mdtype] = 1
+             return local
+ 
+ 
+commit 22c804051caa3a4f5c3ffa9d98c5990e42d041f4
+Author: James Antill <james@and.org>
+Date:   Mon Oct 24 16:01:59 2011 -0400
+
+    When a repo. fails in repolist, manually populate the ones after it.
+
+diff --git a/yumcommands.py b/yumcommands.py
+index a862064..172c40d 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -1664,6 +1664,13 @@ class RepoListCommand(YumCommand):
+             except yum.Errors.RepoError:
+                 if verbose:
+                     raise
++                #  populate them by hand, so one failure doesn't kill everything
++                # after it.
++                for repo in base.repos.listEnabled():
++                    try:
++                        base.repos.populateSack(repo.id)
++                    except yum.Errors.RepoError:
++                        pass
+ 
+         repos = base.repos.repos.values()
+         repos.sort()

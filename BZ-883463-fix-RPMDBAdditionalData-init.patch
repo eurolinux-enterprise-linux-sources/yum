@@ -1,0 +1,16 @@
+diff -up yum-3.2.29/yum/rpmsack.py.old yum-3.2.29/yum/rpmsack.py
+--- yum-3.2.29/yum/rpmsack.py.old	2014-04-18 11:39:31.000000000 +0200
++++ yum-3.2.29/yum/rpmsack.py	2014-04-18 11:43:58.849552466 +0200
+@@ -1602,10 +1602,10 @@ class RPMDBAdditionalData(object):
+         if not os.path.exists(self.conf.db_path):
+             try:
+                 os.makedirs(self.conf.db_path)
++                self.conf.writable = True
+             except (IOError, OSError), e:
+                 # some sort of useful thing here? A warning?
+-                return
+-            self.conf.writable = True
++                pass
+         else:
+             if os.access(self.conf.db_path, os.W_OK):
+                 self.conf.writable = True

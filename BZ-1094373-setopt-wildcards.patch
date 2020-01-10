@@ -1,0 +1,23 @@
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2014-05-06 16:31:53.000000000 +0200
++++ yum-3.2.29/yum/__init__.py	2014-05-06 16:33:29.187880068 +0200
+@@ -428,6 +428,19 @@ class YumBase(depsolve.Depsolve):
+ 
+                 thisrepo.base_persistdir = self.conf._repos_persistdir
+ 
++            # do the wildcard ones first
++            # The keys are in indeterminate order at this point, *sigh*.
++            for i in sorted(self.repo_setopts):
++                #  Skip normal names, as we want to do wildcard matches first
++                # and then override with specific id stuff.
++                if not misc.re_glob(i):
++                    continue
++                if fnmatch.fnmatch(thisrepo.id, i):
++                    for opt in self.repo_setopts[i].items:
++                        if not hasattr(thisrepo, opt):
++                            msg = "Repo %s did not have a %s attr. before setopt"
++                            self.logger.warning(msg % (thisrepo.id, opt))
++                        setattr(thisrepo, opt, getattr(self.repo_setopts[i], opt))
+ 
+             if thisrepo.id in self.repo_setopts:
+                 for opt in self.repo_setopts[thisrepo.id].items:

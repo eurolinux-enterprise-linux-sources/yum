@@ -1,0 +1,24 @@
+commit 3d7c28d4ec579b97e30b75364d4662ec360d70ca
+Author: James Antill <james@and.org>
+Date:   Thu Jun 2 10:28:50 2011 -0400
+
+    Fix for pulp directly using RepoStorage() without a YumBase().
+
+diff --git a/yum/repos.py b/yum/repos.py
+index 4ea4961..3793bad 100644
+--- a/yum/repos.py
++++ b/yum/repos.py
+@@ -110,7 +110,12 @@ class RepoStorage:
+             repoobj.quick_enable_disable = self.quick_enable_disable
+         else:
+             self._cache_enabled_repos = None
+-        repoobj._override_sigchecks = self.ayum._override_sigchecks
++        #  At least pulp reuses RepoStorage but doesn't have a "real" YumBase()
++        # so we can't guarantee new YumBase() attrs. exist.
++        if not hasattr(self.ayum, '_override_sigchecks'):
++            repoobj._override_sigchecks = False
++        else:
++            repoobj._override_sigchecks = self.ayum._override_sigchecks
+ 
+     def delete(self, repoid):
+         if repoid in self.repos:

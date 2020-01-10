@@ -1,0 +1,115 @@
+commit 5a13788a8660848d62e394c9294bccfa3f491ab5
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Tue Jun 21 15:43:18 2011 +0200
+
+    Fix a leaked file descriptor
+    
+    'yum.log' is now closed when YumBase instance is GC'd.
+    Resolves BZ 713924.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 28b875c..eb52696 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -203,11 +203,14 @@ class YumBase(depsolve.Depsolve):
+         self.prerepoconf = _YumPreRepoConf()
+ 
+         self.run_with_package_names = set()
++        self._cleanup = []
+ 
+     def __del__(self):
+         self.close()
+         self.closeRpmDB()
+         self.doUnlock()
++        # call cleanup callbacks
++        for cb in self._cleanup: cb()
+ 
+     def close(self):
+         # We don't want to create the object, so we test if it's been created
+@@ -375,7 +378,7 @@ class YumBase(depsolve.Depsolve):
+                                      syslog_device)
+ 
+     def doFileLogSetup(self, uid, logfile):
+-        logginglevels.setFileLog(uid, logfile)
++        logginglevels.setFileLog(uid, logfile, self._cleanup)
+ 
+     def getReposFromConfigFile(self, repofn, repo_age=None, validate=None):
+         """read in repositories from a config .repo file"""
+diff --git a/yum/logginglevels.py b/yum/logginglevels.py
+index 8fae5ab..14c5e73 100644
+--- a/yum/logginglevels.py
++++ b/yum/logginglevels.py
+@@ -186,7 +186,7 @@ def doLoggingSetup(debuglevel, errorlevel,
+     if errorlevel is not None:  
+         setErrorLevel(errorlevel)
+ 
+-def setFileLog(uid, logfile):
++def setFileLog(uid, logfile, cleanup=None):
+     # TODO: When python's logging config parser doesn't blow up
+     # when the user is non-root, put this in the config file.
+     # syslog-style log
+@@ -208,6 +208,8 @@ def setFileLog(uid, logfile):
+                 "%b %d %H:%M:%S")
+             filehandler.setFormatter(formatter)
+             filelogger.addHandler(filehandler)
++            if not cleanup is None:
++                cleanup.append(lambda: filelogger.removeHandler(filehandler))
+         except IOError:
+             logging.getLogger("yum").critical('Cannot open logfile %s', logfile)
+ 
+commit 9a982cb04ee585e64010bf8885c3f8868552935f
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Tue Mar 6 16:53:06 2012 +0100
+
+    Allow changing the exit code on non-fatal errors.
+    
+    Currently, doCommand() may return result=1 to indicate a fatal error,
+    or result=0/2 to signal success.  Minor errors are usually handled just
+    by printing an error message, but they can't change the exit code.
+    
+    Use a read-write attribute instead of 0 as the exit code, so that minor
+    errors can change it without disturbing the control flow.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index fab3553..eb946d9 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -210,6 +210,7 @@ class YumBase(depsolve.Depsolve):
+ 
+         self.run_with_package_names = set()
+         self._cleanup = []
++        self.exit_code = 0
+ 
+     def __del__(self):
+         self.close()
+diff --git a/yummain.py b/yummain.py
+index e1a9702..c473df6 100755
+--- a/yummain.py
++++ b/yummain.py
+@@ -160,7 +160,7 @@ def main(args):
+         for msg in resultmsgs:
+             verbose_logger.log(logginglevels.INFO_2, '%s', msg)
+         if unlock(): return 200
+-        return 0
++        return base.exit_code
+     elif result == 1:
+         # Fatal error
+         for msg in resultmsgs:
+@@ -199,7 +199,7 @@ def main(args):
+     if result == 0:
+         # Normal exit
+         if unlock(): return 200
+-        return 0
++        return base.exit_code
+     elif result == 1:
+         # Fatal error
+         for msg in resultmsgs:
+@@ -257,7 +257,7 @@ def main(args):
+         verbose_logger.log(logginglevels.INFO_2, _('Complete!'))
+ 
+     if unlock(): return 200
+-    return return_code
++    return return_code or base.exit_code
+ 
+ def hotshot(func, *args, **kwargs):
+     import hotshot.stats

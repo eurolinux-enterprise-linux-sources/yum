@@ -1,0 +1,21 @@
+commit 7b2121b6687fbcd1dfb7c3496bbe4b0ef89f256f
+Author: James Antill <james@and.org>
+Date:   Tue Feb 15 10:43:03 2011 -0500
+
+     Fix printing the obsoleters message, BZ 677666.
+    
+     Happened due to the cleanup in
+    94d742bf395cc565cf3a0dca138608a9296b1303 giving us a bad "continue".
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index e395cc5..a3a1b02 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -3430,7 +3430,6 @@ class YumBase(depsolve.Depsolve):
+                 pkgs = po.obsoletedBy(pkgs, limit=1)
+                 if pkgs:
+                     already_obs = pkgs[0]
+-                    continue
+ 
+                 if already_obs:
+                     self.verbose_logger.warning(_('Package %s is obsoleted by %s which is already installed'), 

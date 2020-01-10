@@ -1,0 +1,194 @@
+Index: yum-3.2.29/yum/config.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- yum-3.2.29/yum/config.py	(revision )
++++ yum-3.2.29/yum/config.py	(revision )
+@@ -757,6 +757,8 @@
+  
+     depsolve_loop_limit = PositiveIntOption(100, names_of_0=["<forever>"])
+ 
++    recheck_installed_requires = BoolOption(False)
++
+     _reposlist = []
+ 
+     def dump(self):
+Index: yum-3.2.29/yum/depsolve.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- yum-3.2.29/yum/depsolve.py	(revision )
++++ yum-3.2.29/yum/depsolve.py	(revision )
+@@ -963,9 +963,12 @@
+ 
+         # if this is an update, we should check what the old
+         # requires were to make things faster
++        #  Note that if the rpmdb is broken, this gets annoying. So we provide
++        # a way to turn it off.
+         oldreqs = []
++        if not self.conf.recheck_installed_requires:
+-        for oldpo in txmbr.updates:
++            for oldpo in txmbr.updates:
+-            oldreqs.extend(oldpo.returnPrco('requires'))
++                oldreqs.extend(oldpo.returnPrco('strong_requires'))
+         oldreqs = set(oldreqs)
+ 
+         ret = []
+Index: yum-3.2.29/yum/packages.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- yum-3.2.29/yum/packages.py	(revision )
++++ yum-3.2.29/yum/packages.py	(revision )
+@@ -1299,6 +1299,12 @@
+                 continue
+ 
+             lst = hdr[getattr(rpm, 'RPMTAG_%sFLAGS' % tag)]
++            if tag == 'REQUIRE':
++                #  Rpm is a bit magic here, and if pkgA requires(pre/post): foo
++                # it will then let you remove foo _after_ pkgA has been
++                # installed. So we need to mark those deps. as "weak".
++                bits = rpm.RPMSENSE_SCRIPT_PRE | rpm.RPMSENSE_SCRIPT_POST
++                weakreqs = [bool(flag & bits) for flag in lst]
+             flag = map(rpmUtils.miscutils.flagToString, lst)
+             flag = map(misc.share_data, flag)
+ 
+@@ -1309,6 +1315,10 @@
+ 
+             prcotype = tag2prco[tag]
+             self.prco[prcotype] = map(misc.share_data, zip(name,flag,vers))
++            if tag == 'REQUIRE':
++                weakreqs = zip(weakreqs, self.prco[prcotype])
++                strongreqs = [wreq[1] for wreq in weakreqs if not wreq[0]]
++                self.prco['strong_requires'] = strongreqs
+     
+     def tagByName(self, tag):
+         warnings.warn("tagByName() will go away in a furture version of Yum.\n",
+Index: yum-3.2.29/test/testbase.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- yum-3.2.29/test/testbase.py	(revision )
++++ yum-3.2.29/test/testbase.py	(revision )
+@@ -56,6 +56,7 @@
+         self.protected_multilib = False
+         self.clean_requirements_on_remove = True
+         self.depsolve_loop_limit = 10
++        self.recheck_installed_requires = False
+ 
+ class FakeSack:
+     """ Fake PackageSack to use with FakeRepository"""
+Index: yum-3.2.29/yum/rpmsack.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- yum-3.2.29/yum/rpmsack.py	(revision )
++++ yum-3.2.29/yum/rpmsack.py	(revision )
+@@ -98,7 +98,7 @@
+ 
+     def required_packages(self):
+         pkgset = set()
+-        for (reqn, reqf, reqevr) in self.requires:
++        for (reqn, reqf, reqevr) in self.strong_requires:
+             for pkg in self.rpmdb.getProvides(reqn, reqf, reqevr):
+                 if pkg != self:
+                     pkgset.add(pkg)
+@@ -1495,7 +1495,7 @@
+         providers = set() # Speedup, as usual :)
+         problems = []
+         for pkg in sorted(pkgs): # The sort here is mainly for "UI"
+-            for rreq in pkg.requires:
++            for rreq in pkg.strong_requires:
+                 if rreq[0].startswith('rpmlib'): continue
+                 if rreq in providers:            continue
+ 
+Index: yum-3.2.29/yum/packages.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- yum-3.2.29/yum/packages.py	(revision )
++++ yum-3.2.29/yum/packages.py	(revision )
+@@ -568,15 +568,18 @@
+     dirlist = property(fget=lambda self: self.returnFileEntries(ftype='dir'))
+     ghostlist = property(fget=lambda self: self.returnFileEntries(ftype='ghost'))
+     requires = property(fget=lambda self: self.returnPrco('requires'))
++    strong_requires = property(fget=lambda self: self.returnPrco('strong_requires'))
+     provides = property(fget=lambda self: self.returnPrco('provides'))
+     obsoletes = property(fget=lambda self: self.returnPrco('obsoletes'))
+     conflicts = property(fget=lambda self: self.returnPrco('conflicts'))
+     provides_names = property(fget=lambda self: self.returnPrcoNames('provides'))
+     requires_names = property(fget=lambda self: self.returnPrcoNames('requires'))
++    strong_requires_names = property(fget=lambda self: self.returnPrcoNames('strong_requires'))
+     conflicts_names = property(fget=lambda self: self.returnPrcoNames('conflicts'))
+     obsoletes_names = property(fget=lambda self: self.returnPrcoNames('obsoletes'))
+     provides_print = property(fget=lambda self: self.returnPrco('provides', True))
+     requires_print = property(fget=lambda self: self.returnPrco('requires', True))
++    strong_requires_print = property(fget=lambda self: self.returnPrco('strong_requires', True))
+     conflicts_print = property(fget=lambda self: self.returnPrco('conflicts', True))
+     obsoletes_print = property(fget=lambda self: self.returnPrco('obsoletes', True))
+     changelog = property(fget=lambda self: self.returnChangelog())
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+--- yum-3.2.29/cli.py.old	2014-05-30 12:43:47.000000000 +0200
++++ yum-3.2.29/cli.py	2014-05-30 12:46:22.470659363 +0200
+@@ -1461,6 +1461,9 @@ class YumOptionParser(OptionParser):
+         try:
+             # config file is parsed and moving us forward
+             # set some things in it.
++
++            if opts.tolerant or self.base.conf.tolerant: # Make it slower capt.
++                self.base.conf.recheck_installed_requires = True
+                 
+             # Handle remaining options
+             if opts.assumeyes:
+diff -up yum-3.2.29/docs/yum.8.old yum-3.2.29/docs/yum.8
+--- yum-3.2.29/docs/yum.8.old	2014-05-30 12:43:47.000000000 +0200
++++ yum-3.2.29/docs/yum.8	2014-05-30 12:47:07.589750133 +0200
+@@ -521,7 +521,8 @@ of /var/cache/yum, using this option wil
+ $releasever in your cachedir configuration to stop this).
+ .PP 
+ .IP "\fB\-t, \-\-tolerant\fP"
+-This option currently does nothing.
++This option makes yum go slower, checking for things that shouldn't be possible
++making it more tolerant of external errors.
+ .br
+ .IP "\fB\-\-setopt=option=value\fP"
+ Set any config option in yum config or repo files. For options in the global 
+diff -up yum-3.2.29/test/testbase.py.old yum-3.2.29/test/testbase.py
+--- yum-3.2.29/test/testbase.py.old	2014-05-30 12:43:47.000000000 +0200
++++ yum-3.2.29/test/testbase.py	2014-05-30 12:49:00.467980549 +0200
+@@ -107,6 +107,7 @@ class FakePackage(packages.YumAvailableP
+         self.yumdb_info = {}
+ 
+         self.prco['provides'].append((name, 'EQ', (epoch, version, release)))
++        self.prco['strong_requires'] = []
+ 
+         # Just a unique integer
+         self.id = self.__hash__()
+@@ -116,6 +117,7 @@ class FakePackage(packages.YumAvailableP
+         self.prco['provides'].append((name, flag, evr))
+     def addRequires(self, name, flag=None, evr=(None, None, None)):
+         self.prco['requires'].append((name, flag, evr))
++        self.prco['strong_requires'].append((name, flag, evr))
+     def addConflicts(self, name, flag=None, evr=(None, None, None)):
+         self.prco['conflicts'].append((name, flag, evr))
+     def addObsoletes(self, name, flag=None, evr=(None, None, None)):
+diff -up yum-3.2.29/yum/sqlitesack.py.old yum-3.2.29/yum/sqlitesack.py
+--- yum-3.2.29/yum/sqlitesack.py.old	2014-05-30 12:43:47.000000000 +0200
++++ yum-3.2.29/yum/sqlitesack.py	2014-05-30 12:44:55.574487056 +0200
+@@ -382,6 +382,10 @@ class YumAvailablePackageSqlite(YumAvail
+ 
+     def returnPrco(self, prcotype, printable=False):
+         prcotype = _share_data(prcotype)
++        if prcotype == 'strong_requires':
++            # pkg not installed so we don't know require flags yet
++            # returning all requires should work in most cases
++            prcotype = 'requires'
+         if isinstance(self.prco[prcotype], tuple):
+             sql = "SELECT name, version, release, epoch, flags " \
+                   "FROM %s WHERE pkgKey = ?" % prcotype

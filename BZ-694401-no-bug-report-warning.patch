@@ -1,0 +1,12 @@
+diff -up ./yum-3.2.29/cli.py.old ./yum-3.2.29/cli.py
+--- a/cli.py	2011-09-12 15:11:57.523032267 +0200
++++ b/cli.py	2011-09-12 15:12:07.114208388 +0200
+@@ -531,7 +531,7 @@ class YumBaseCli(yum.YumBase, output.Yum
+ 
+                 if rpmlib_only:
+                     return 1, [_('RPM needs to be updated')]
+-                return 1, [_('Please report this error in %s') % self.conf.bugtracker_url]
++                return 1, []
+ 
+             self.verbose_logger.debug('rpm_check_debug time: %0.3f' % (time.time() - rcd_st))
+ 

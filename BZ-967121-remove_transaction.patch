@@ -1,0 +1,171 @@
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+diff -up yum-3.2.29/yum/depsolve.py.old yum-3.2.29/yum/depsolve.py
+--- yum-3.2.29/yum/depsolve.py.old	2014-04-10 11:31:28.000000000 +0200
++++ yum-3.2.29/yum/depsolve.py	2014-04-10 11:58:11.181006221 +0200
+@@ -106,9 +106,12 @@ class Depsolve(object):
+             self._tsInfo = self._transactionDataFactory()
+             if remove_only:
+                 pkgSack = None
++                pkgSackCtor = None
+             else:
+-                pkgSack = self.pkgSack
+-            self._tsInfo.setDatabases(self.rpmdb, pkgSack)
++                # Don't instant setup, or things like localinstall are screwed.
++                pkgSack = None
++                pkgSackCtor = self._getSacks
++            self._tsInfo.setDatabases(self.rpmdb, pkgSack, pkgSackCtor)
+             self._tsInfo.installonlypkgs = self.conf.installonlypkgs # this kinda sucks
+             # this REALLY sucks, sadly (needed for group conditionals)
+             self._tsInfo.install_method = self.install
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2014-04-10 11:31:28.000000000 +0200
++++ yum-3.2.29/yum/__init__.py	2014-04-10 11:45:43.740441865 +0200
+@@ -1002,9 +1002,13 @@ class YumBase(depsolve.Depsolve):
+             # If transaction was changed by postresolve plugins then we should run skipbroken again
+             (rescode, restring) = self._doSkipBroken(rescode, restring, clear_skipped=False )
+ 
+-        if self.tsInfo.pkgSack is not None: # rm Transactions don't have pkgSack
++        if self.tsInfo._pkgSack is not None: # Transactions have pkgSack?
+             self.tsInfo.pkgSack.dropCachedData()
+ 
++        # FIXME: This is horrible, see below and yummain. Maybe create a real
++        #        rescode object? :(
++        self._depsolving_failed = rescode == 1
++
+         txmbrs = []
+         if rescode == 2 and self.conf.protected_multilib and self.arch.multilib:
+             txmbrs = self.tsInfo.getMembersWithState(None, TS_INSTALL_STATES)
+@@ -1074,6 +1078,7 @@ much more problems).
+                 xrestring.append(msg % (first, other))
+         if xrestring:
+             rescode = 1
++            self._depsolving_failed = False
+             restring = xrestring
+ 
+         #  This is a version of the old "protect-packages" plugin, it allows
+@@ -1126,6 +1131,7 @@ much more problems).
+             for pkgname in sorted(bad_togo):
+                 restring.append(_('Trying to remove "%s", which is protected') %
+                                 pkgname)
++            self._depsolving_failed = False
+ 
+         if rescode == 2:
+             self.save_ts(auto=True)
+@@ -5259,9 +5265,13 @@ much more problems).
+         
+         msg = "%s\n" % self.rpmdb.simpleVersion(main_only=True)[0]
+         msg += "%s\n" % self.ts.getTsFlags()
+-        msg += "%s\n" % len(self.repos.listEnabled())
+-        for r in self.repos.listEnabled():
+-            msg += "%s:%s:%s\n" % (r.id, len(r.sack), r.repoXML.revision)
++        if self.tsInfo._pkgSack is None: # Transactions have pkgSack?
++            msg += "0\n"
++        else:
++            msg += "%s\n" % len(self.repos.listEnabled())
++            for r in self.repos.listEnabled():
++                msg += "%s:%s:%s\n" % (r.id, len(r.sack), r.repoXML.revision)
++
+         msg += "%s\n" % len(self.tsInfo.getMembers())
+         for txmbr in self.tsInfo.getMembers():
+             msg += txmbr._dump()
+diff -up yum-3.2.29/yummain.py.old yum-3.2.29/yummain.py
+--- yum-3.2.29/yummain.py.old	2014-04-10 11:31:28.000000000 +0200
++++ yum-3.2.29/yummain.py	2014-04-10 11:42:52.106083837 +0200
+@@ -76,6 +76,16 @@ def main(args):
+             return 200
+         return 0
+ 
++    def rpmdb_warn_checks():
++        try:
++            probs = base._rpmdb_warn_checks(out=verbose_logger.info, warn=False)
++        except Errors.YumBaseError, e:
++            # This is mainly for PackageSackError from rpmdb.
++            verbose_logger.info(_(" Yum checks failed: %s"), exception2msg(e))
++            probs = []
++        if not probs:
++            verbose_logger.info(_(" You could try running: rpm -Va --nofiles --nodigest"))
++
+     logger = logging.getLogger("yum.main")
+     verbose_logger = logging.getLogger("yum.verbose.main")
+ 
+@@ -196,10 +206,10 @@ def main(args):
+             prefix = _('Error: %s')
+             prefix2nd = (' ' * (utf8_width(prefix) - 2))
+             logger.critical(prefix, msg.replace('\n', '\n' + prefix2nd))
+-        if not base.conf.skip_broken:
+-            verbose_logger.info(_(" You could try using --skip-broken to work around the problem"))
+-        if not base._rpmdb_warn_checks(out=verbose_logger.info, warn=False):
+-            verbose_logger.info(_(" You could try running: rpm -Va --nofiles --nodigest"))
++        if base._depsolving_failed:
++            if not base.conf.skip_broken:
++                verbose_logger.info(_(" You could try using --skip-broken to work around the problem"))
++            rpmdb_warn_checks()
+         if unlock(): return 200
+         return 1
+     elif result == 2:
+@@ -231,8 +241,7 @@ def main(args):
+         (result, resultmsgs) = return_code
+         for msg in resultmsgs:
+             logger.critical("%s", msg)
+-        if not base._rpmdb_warn_checks(out=verbose_logger.info, warn=False):
+-            verbose_logger.info(_(" You could try running: rpm -Va --nofiles --nodigest"))
++        rpmdb_warn_checks()
+         return_code = result
+         if base._ts_save_file:
+             verbose_logger.info(_("Your transaction was saved, rerun it with: yum load-transaction %s") % base._ts_save_file)
+diff -up yum-3.2.29/yum/transactioninfo.py.old yum-3.2.29/yum/transactioninfo.py
+--- yum-3.2.29/yum/transactioninfo.py.old	2010-11-03 19:08:27.000000000 +0100
++++ yum-3.2.29/yum/transactioninfo.py	2014-04-10 12:00:33.523379874 +0200
+@@ -87,7 +87,8 @@ class TransactionData:
+         self.conditionals = {} # key = pkgname, val = list of pos to add
+ 
+         self.rpmdb = None
+-        self.pkgSack = None
++        self._pkgSack = None
++        self._pkgSackCtor = None
+         self.pkgSackPackages = 0
+         self.localSack = PackageSack()
+         self._inSack = GetProvReqOnlyPackageSack()
+@@ -114,6 +115,18 @@ class TransactionData:
+         else:
+             return iter(self.getMembers())
+ 
++    def _getPkgSack(self):
++        if self._pkgSack is not None:
++            return self._pkgSack
++        if self._pkgSackCtor is not None:
++            self._pkgSack = self._pkgSackCtor()
++        return self._pkgSack
++
++    pkgSack = property(fget=lambda self: self._getPkgSack(),
++                       fset=lambda self, value: setattr(self, "_pkgSack",value),
++                       fdel=lambda self: setattr(self, "_pkgSack", None),
++                       doc="Package sack object")
++
+     def debugprint(self, msg):
+         if self.debug:
+             print msg
+@@ -207,7 +220,9 @@ class TransactionData:
+                 txmbrs = self.matchNaevr(na[0], na[1])
+ 
+         if not txmbrs:
+-            if self.pkgSack is None:
++            if self._inSack is not None:
++                pkgs = self._inSack.returnPackages(patterns=[pattern])
++            elif self.pkgSack is None:
+                 pkgs = []
+             else:
+                 pkgs = self.pkgSack.returnPackages(patterns=[pattern])
+@@ -546,9 +561,10 @@ class TransactionData:
+         return txmbr
+ 
+ 
+-    def setDatabases(self, rpmdb, pkgSack):
++    def setDatabases(self, rpmdb, pkgSack, pkgSackCtor=None):
+         self.rpmdb = rpmdb
+-        self.pkgSack = pkgSack
++        self._pkgSack     = pkgSack
++        self._pkgSackCtor = pkgSackCtor
+ 
+     def getNewProvides(self, name, flag=None, version=(None, None, None)):
+         """return dict { packages -> list of matching provides }

@@ -1,0 +1,44 @@
+commit ed39459060f8119370322f0976885502fba349e3
+Author: James Antill <james@and.org>
+Date:   Thu May 10 15:50:52 2012 -0400
+
+    Fix weird edge case for isntallonly, when we install N kernels at once.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 2be21a0..9bb3550 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -5672,6 +5672,7 @@ class YumBase(depsolve.Depsolve):
+         ts = self.rpmdb.readOnlyTS()
+         (cur_kernel_v, cur_kernel_r) = misc.get_running_kernel_version_release(ts)
+         install_only_names = set(self.conf.installonlypkgs)
++        found = {}
+         for m in self.tsInfo.getMembers():
+             if m.ts_state not in ('i', 'u'):
+                 continue
+@@ -5682,12 +5683,21 @@ class YumBase(depsolve.Depsolve):
+             if not po_names.intersection(install_only_names):
+                 continue
+ 
+-            installed = self.rpmdb.searchNevra(name=m.name)
++            if m.name not in found:
++                found[m.name] = 1
++            else:
++                found[m.name] += 1
++
++        for name in found:
++            installed = self.rpmdb.searchNevra(name=name)
+             installed = _sort_and_filter_installonly(installed)
+-            if len(installed) < self.conf.installonly_limit - 1:
+-                continue # we're adding one
+ 
+-            numleft = len(installed) - self.conf.installonly_limit + 1
++            total = len(installed) + found[name]
++            if total <= self.conf.installonly_limit:
++                continue # Not adding enough to trigger.
++
++            # Number left to try and remove...
++            numleft = total - self.conf.installonly_limit
+             for po in installed:
+                 if (po.version, po.release) == (cur_kernel_v, cur_kernel_r): 
+                     # don't remove running

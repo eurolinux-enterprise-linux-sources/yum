@@ -1,0 +1,26 @@
+diff -up yum-3.2.29/yum/config.py.old yum-3.2.29/yum/config.py
+--- yum-3.2.29/yum/config.py.old	2014-04-18 11:52:28.000000000 +0200
++++ yum-3.2.29/yum/config.py	2014-04-18 11:53:36.107813388 +0200
+@@ -643,7 +643,7 @@ class YumConf(StartupConf):
+     commands = ListOption()
+     exclude = ListOption()
+     failovermethod = Option('priority')
+-    proxy = UrlOption(schemes=('http', 'ftp', 'https'), allow_none=True)
++    proxy = UrlOption(default=False, schemes=('http', 'ftp', 'https'), allow_none=True)
+     proxy_username = Option()
+     proxy_password = Option()
+     username = Option()
+diff -up yum-3.2.29/yum/yumRepo.py.old yum-3.2.29/yum/yumRepo.py
+--- yum-3.2.29/yum/yumRepo.py.old	2014-04-18 11:52:28.000000000 +0200
++++ yum-3.2.29/yum/yumRepo.py	2014-04-18 11:54:15.622899844 +0200
+@@ -432,7 +432,9 @@ class YumRepository(Repository, config.R
+         self._proxy_dict = {} # zap it
+         proxy_string = None
+         empty = (None, '_none_', '')
+-        if self.proxy not in empty:
++        if self.proxy is None:  # got 'proxy=_none_'
++            proxy_string = ''   # this disables default proxies
++        elif self.proxy:
+             proxy_string = '%s' % self.proxy
+             if self.proxy_username not in empty:
+ 

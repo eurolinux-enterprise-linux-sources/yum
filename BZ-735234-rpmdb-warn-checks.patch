@@ -1,0 +1,82 @@
+From eca9ca480f9ad6612bb161c55ac4525028eef725 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zden=C4=9Bk=20Pavlas?= <zpavlas@redhat.com>
+Date: Wed, 15 Feb 2012 09:38:40 +0100
+Subject: [PATCH] Always catch _rpmdb_warn_checks errors.  BZ 735234.
+
+This fixes all callers.
+---
+ yum/__init__.py |   11 ++++++++++-
+ yummain.py      |   16 ++++------------
+ 2 files changed, 14 insertions(+), 13 deletions(-)
+
+--- yum/__init__.py
++++ yum/__init__.py
+@@ -1346,7 +1346,7 @@ class YumBase(depsolve.Depsolve):
+             toRemove.add(dep)
+             self._getDepsToRemove(dep, deptree, toRemove)
+ 
+-    def _rpmdb_warn_checks(self, out=None, warn=True, chkcmd=None, header=None,
++    def _rpmdb_warn_checks_exc(self, out=None, warn=True, chkcmd=None, header=None,
+                            ignore_pkgs=[]):
+         if out is None:
+             out = self.logger.warning
+@@ -1414,6 +1414,15 @@ class YumBase(depsolve.Depsolve):
+ 
+         return probs
+ 
++    def _rpmdb_warn_checks(self, out=None, warn=True, chkcmd=None, header=None,
++                           ignore_pkgs=[]):
++        try:
++            return self._rpmdb_warn_checks_exc(out, warn, chkcmd, header, ignore_pkgs)
++        except Errors.YumBaseError, e:
++            # This is mainly for PackageSackError from rpmdb.
++            self.verbose_logger.info(_(" Yum checks failed: %s"), exception2msg(e))
++            return []
++
+     def runTransaction(self, cb):
+         """takes an rpm callback object, performs the transaction"""
+ 
+diff --git a/yummain.py b/yummain.py
+index e1a9702..7345b6e 100755
+--- yummain.py
++++ yummain.py
+@@ -76,16 +76,6 @@ def main(args):
+             return 200
+         return 0
+ 
+-    def rpmdb_warn_checks():
+-        try:
+-            probs = base._rpmdb_warn_checks(out=verbose_logger.info, warn=False)
+-        except Errors.YumBaseError, e:
+-            # This is mainly for PackageSackError from rpmdb.
+-            verbose_logger.info(_(" Yum checks failed: %s"), exception2msg(e))
+-            probs = []
+-        if not probs:
+-            verbose_logger.info(_(" You could try running: rpm -Va --nofiles --nodigest"))
+-
+     logger = logging.getLogger("yum.main")
+     verbose_logger = logging.getLogger("yum.verbose.main")
+ 
+@@ -208,7 +199,8 @@ def main(args):
+             logger.critical(prefix, msg.replace('\n', '\n' + prefix2nd))
+         if not base.conf.skip_broken:
+             verbose_logger.info(_(" You could try using --skip-broken to work around the problem"))
+-        rpmdb_warn_checks()
++        if not base._rpmdb_warn_checks(out=verbose_logger.info, warn=False):
++            verbose_logger.info(_(" You could try running: rpm -Va --nofiles --nodigest"))
+         if unlock(): return 200
+         return 1
+     elif result == 2:
+@@ -240,7 +232,8 @@ def main(args):
+         (result, resultmsgs) = return_code
+         for msg in resultmsgs:
+             logger.critical("%s", msg)
+-        rpmdb_warn_checks()
++        if not base._rpmdb_warn_checks(out=verbose_logger.info, warn=False):
++            verbose_logger.info(_(" You could try running: rpm -Va --nofiles --nodigest"))
+         return_code = result
+         if base._ts_save_file:
+             verbose_logger.info(_("Your transaction was saved, rerun it with: yum load-transaction %s") % base._ts_save_file)
+-- 
+1.7.4.4
+

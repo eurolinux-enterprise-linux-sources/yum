@@ -1,0 +1,14 @@
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2014-05-14 09:19:01.000000000 +0200
++++ yum-3.2.29/yum/__init__.py	2014-05-14 09:20:06.487539962 +0200
+@@ -978,6 +978,10 @@ class YumBase(depsolve.Depsolve):
+     def buildTransaction(self, unfinished_transactions_check=True):
+         """go through the packages in the transaction set, find them in the
+            packageSack or rpmdb, and pack up the ts accordingly"""
++        # FIXME: This is horrible, see below and yummain. Maybe create a real
++        #        rescode object? :(
++        self._depsolving_failed = False
++
+         if (unfinished_transactions_check and
+             misc.find_unfinished_transactions(yumlibpath=self.conf.persistdir)):
+             msg = _('There are unfinished transactions remaining. You might ' \

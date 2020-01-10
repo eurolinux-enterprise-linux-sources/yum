@@ -1,0 +1,24 @@
+commit 31ed5a8726cd55619bcdab2af794fd683b128b7e
+Author: James Antill <james@and.org>
+Date:   Mon Apr 9 14:22:11 2012 -0400
+
+    Don't traceback in hisotry stats, when we have no transactions. BZ 802661
+
+diff --git a/yumcommands.py b/yumcommands.py
+index 477d16a..f31d495 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -2593,9 +2593,12 @@ class HistoryCommand(YumCommand):
+         print "File        :", base.history._db_file
+         num = os.stat(base.history._db_file).st_size
+         print "Size        :", locale.format("%d", num, True)
++        trans_N = base.history.last()
++        if trans_N is None:
++            print _("Transactions:"), 0
++            return
+         counts = base.history._pkg_stats()
+         trans_1 = base.history.old("1")[0]
+-        trans_N = base.history.last()
+         print _("Transactions:"), trans_N.tid
+         print _("Begin time  :"), time.ctime(trans_1.beg_timestamp)
+         print _("End time    :"), time.ctime(trans_N.end_timestamp)

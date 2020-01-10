@@ -1,0 +1,91 @@
+.\" yum-cron - cron interface for yum
+.TH "yum-cron" "8" "" "James Antill" ""
+.SH "NAME"
+yum-cron \- an interface to convieniently call yum from cron
+
+.SH "SYNOPSIS"
+service \fByum-cron\fP start
+
+.SH "DESCRIPTION"
+.PP
+\fByum-cron\fP is a simple way to call yum commands from cron.
+It provides configuration to keep repository metadata up to date,
+and to check for, download, and apply updates.
+.SH "CONFIGURATION OPTIONS"
+.PP
+\fICHECK_FIRST\fP \- Before we try to do anything, check to see if we can reach
+the repos. If they cannot be reached then silently stop all further actions.
+Default no.
+
+\fICHECK_ONLY\fP \- Just run the "yum check\-update" command (will not download
+or install any packages).
+Default no.
+
+\fIDOWNLOAD_ONLY\fP \- Just run the "yum upgrade \-y \-\-downloadonly" command (does
+nothing if CHECK_ONLY is set).
+Default no.
+
+\fIERROR_LEVEL\fP \- The value passed to the "\-\-errorlevel" yum command line
+option.
+Default 0.
+
+\fIDEBUG_LEVEL\fP \- The value passed to the "\-\-debuglevel" yum command line
+option.
+Default 0.
+
+\fIRANDOMWAIT\fP \- The value passed to the "\-\-randomwait" yum command line
+option.
+Default 60.
+
+\fIMAILTO\fP \- If this is specified then the cronjob will never output anything
+directly, but will mail it (via. the mail command) to the user specified.
+Default (unset).
+
+\fISYSTEMNAME\fP \- How to identify the local machine, when unset we use the
+output of the "hostname" command.
+Default (unset).
+
+\fIDAYS_OF_WEEK\fP \- A list of the day nummbers to run on, so that yum\-cron
+can be specified to run everyday and be reconfigured here to run less often.
+0 is Sunday.
+Default 0123456 (everyday).
+
+\fICLEANDAY\fP \- Which day of the week should yum\-cron tell yum to clean all
+data from it's cache. Technically this just means it should also run the
+yum\-weekly.yum script.
+Default 0.
+
+\fISERVICE_WAITS\fP \- When a sysadmin. runs "service yum\-cron stop" do we just
+turn the cron service off, or do we check if it's running and wait for it to
+stop before returning.
+Default yes.
+
+\fISERVICE_WAIT_TIME\fP \- Set maximum time period (in seconds) for the
+yum\-cron service to wait when stopping, after this timeout expires we just
+return failure to the "service yum\-cron stop" command.
+Default 300.
+
+.SH "FILES"
+.nf
+/etc/sysconfig/yum\-cron
+/etc/yum/yum\-daily.yum
+/etc/yum/yum\-weekly.yum
+.fi
+
+.PP
+.SH "SEE ALSO"
+.nf
+.I yum (8)
+.fi
+
+.PP
+.SH "AUTHORS"
+.nf
+See the Authors file included with this program.
+.fi
+
+.PP
+.SH "BUGS"
+There of course aren't any bugs, but if you find any, you should email
+ the mailing list, yum\-devel@lists.baseurl.org, or consult bugzilla.
+.fi

@@ -1,0 +1,34 @@
+commit 74d21178642387998245f49d47353f3f5a84aef2
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Mon Apr 2 11:24:09 2012 +0200
+
+    sys.stdout: encode unicode strings only.  BZ 807619.
+    
+    Avoid codecs.getwriter() as it's not compatible with
+    already encoded strings.
+
+diff --git a/yum/misc.py b/yum/misc.py
+index 5321003..e3952b5 100644
+--- a/yum/misc.py
++++ b/yum/misc.py
+@@ -1006,9 +1006,17 @@ def setup_locale(override_codecs=True, override_time=False):
+         locale.setlocale(locale.LC_ALL, 'C')
+         
+     if override_codecs:
+-        import codecs
+-        sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout)
+-        sys.stdout.errors = 'replace'
++        class UnicodeStream:
++            def __init__(self, stream, encoding):
++                self.stream = stream
++                self.encoding = encoding
++            def write(self, s):
++                if isinstance(s, unicode):
++                    s = s.encode(self.encoding, 'replace')
++                self.stream.write(s)
++            def __getattr__(self, name):
++                return getattr(self.stream, name)
++        sys.stdout = UnicodeStream(sys.stdout, locale.getpreferredencoding())
+ 
+ 
+ def get_my_lang_code():

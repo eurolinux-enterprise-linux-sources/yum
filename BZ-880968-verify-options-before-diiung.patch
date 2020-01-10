@@ -1,0 +1,26 @@
+commit 2853dc82e1c14ce15451a3f184507483fe29e85a
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Thu Jan 12 11:53:19 2012 +0100
+
+    Do not set up repos in YumOptionParser. BZ 773512.
+    
+    We should not do that because:
+    - yum commands have not been checked yet (see BZ).
+    - we should not download because we didn't lock yet.
+    - enabled repos are set up in self._getSacks() anyway.
+
+diff --git a/cli.py b/cli.py
+index 62705ad..f5406f9 100755
+--- a/cli.py
++++ b/cli.py
+@@ -1953,10 +1953,6 @@ class YumOptionParser(OptionParser):
+                     self.base.usage()
+                     sys.exit(1)
+ 
+-            # make sure the added repos are setup.        
+-            if len(opts.repos) > 0:
+-                self.base._getRepos(doSetup=True)
+-
+             # Disable all gpg key checking, if requested.
+             if opts.nogpgcheck:
+                 #  Altering the normal configs. doesn't work too well, esp. with

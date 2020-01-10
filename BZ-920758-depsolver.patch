@@ -1,0 +1,12 @@
+diff -up yum-3.2.29/yum/depsolve.py.old yum-3.2.29/yum/depsolve.py
+--- yum-3.2.29/yum/depsolve.py.old	2014-04-02 12:27:35.000000000 +0200
++++ yum-3.2.29/yum/depsolve.py	2014-04-02 12:28:40.582861128 +0200
+@@ -808,6 +808,8 @@ class Depsolve(object):
+                                     # Have to deal with loops!
+                                     continue
+                                 self.tsInfo.remove(otxmbr.pkgtup)
++                                ifr = self.installedFileRequires or {}
++                                ifr.pop(otxmbr.pkgtup, None)
+                                 #  We need to remove an obsoleted entry that
+                                 # was maybe used to resolve something ... ?
+                                 CheckDeps = True

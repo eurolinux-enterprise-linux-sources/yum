@@ -1,0 +1,11 @@
+diff -up yum-3.2.29/etc/yum.logrotate.old yum-3.2.29/etc/yum.logrotate
+--- yum-3.2.29/etc/yum.logrotate.old	2010-05-06 16:54:35.000000000 +0200
++++ yum-3.2.29/etc/yum.logrotate	2014-04-22 15:25:46.119391777 +0200
+@@ -1,7 +1,6 @@
+ /var/log/yum.log {
+     missingok
+     notifempty
+-    size 30k
+     yearly
+     create 0600 root root
+ }

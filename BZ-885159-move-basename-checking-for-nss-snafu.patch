@@ -1,0 +1,89 @@
+
+commit d8d16de03e3853554352a9a36d1814bad8b83145
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Tue Dec 11 11:07:32 2012 +0100
+
+    move the basename checking into _repos.doSetup(). BZ 885159
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 63053af..62bb402 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -701,24 +701,6 @@ class YumBase(depsolve.Depsolve):
+ 
+ 
+         if doSetup:
+-            if (hasattr(urlgrabber, 'grabber') and
+-                hasattr(urlgrabber.grabber, 'pycurl')):
+-                # Must do basename checking, on cert. files...
+-                cert_basenames = {}
+-                for repo in self._repos.listEnabled():
+-                    if not repo.sslclientcert:
+-                        continue
+-                    bn = os.path.basename(repo.sslclientcert)
+-                    if bn not in cert_basenames:
+-                        cert_basenames[bn] = repo
+-                        continue
+-                    if repo.sslclientcert == cert_basenames[bn].sslclientcert:
+-                        # Exactly the same path is fine too
+-                        continue
+-
+-                    msg = 'sslclientcert basename shared between %s and %s'
+-                    raise Errors.ConfigError, msg % (repo, cert_basenames[bn])
+-
+             repo_st = time.time()        
+             self._repos.doSetup(thisrepo)
+             self.verbose_logger.debug('repo time: %0.3f' % (time.time() - repo_st))        
+diff --git a/yum/repos.py b/yum/repos.py
+index de5da1e..3522512 100644
+--- a/yum/repos.py
++++ b/yum/repos.py
+@@ -19,6 +19,7 @@ import fnmatch
+ import types
+ import logging
+ import misc
++import os
+ 
+ import Errors
+ from packageSack import MetaSack
+@@ -121,6 +122,17 @@ class RepoStorage:
+         if len(repos) < 1:
+             self.logger.debug('No Repositories Available to Set Up')
+ 
++        if hasattr(urlgrabber.grabber, 'pycurl'):
++            # Must do basename checking, on cert. files...
++            cert_basenames = {}
++            for repo in self.listEnabled():
++                if repo.sslclientcert:
++                    bn = os.path.basename(repo.sslclientcert)
++                    other = cert_basenames.setdefault(bn, repo)
++                    if repo.sslclientcert != other.sslclientcert:
++                        msg = 'sslclientcert basename shared between %s and %s'
++                        raise Errors.ConfigError, msg % (repo, other)
++
+         for repo in repos:
+             repo.setup(self.ayum.conf.cache, self.ayum.mediagrabber,
+                    gpg_import_func = self.gpg_import_func, confirm_func=self.confirm_func,
+
+diff -up yum-3.2.29/yum/repos.py.old yum-3.2.29/yum/repos.py
+--- yum-3.2.29/yum/repos.py.old	2012-12-17 09:00:44.126782286 +0100
++++ yum-3.2.29/yum/repos.py	2012-12-17 09:03:06.659539264 +0100
+@@ -19,7 +19,7 @@ import fnmatch
+ import types
+ import logging
+ import misc
+-import os
++import os, urlgrabber
+ 
+ import Errors
+ from packageSack import MetaSack
+@@ -80,7 +80,8 @@ class RepoStorage:
+         if len(repos) < 1:
+             self.logger.debug('No Repositories Available to Set Up')
+ 
+-        if hasattr(urlgrabber.grabber, 'pycurl'):
++        if (hasattr(urlgrabber, 'grabber') and
++            hasattr(urlgrabber.grabber, 'pycurl')):
+             # Must do basename checking, on cert. files...
+             cert_basenames = {}
+             for repo in self.listEnabled():

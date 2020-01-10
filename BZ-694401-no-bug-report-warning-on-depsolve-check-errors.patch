@@ -1,0 +1,69 @@
+commit d9522c3d328465984e27176bf6ded9912e7b8f17
+Author: James Antill <james@and.org>
+Date:   Thu Jun 2 11:54:04 2011 -0400
+
+    Return -1 from doTransaction() if user/GPG fails, diff. text. BZ 586690.
+
+diff --git a/cli.py b/cli.py
+index f4bd7b1..7ef147d 100644
+--- a/cli.py
++++ b/cli.py
+@@ -448,7 +448,7 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+         # just make sure there's not, well, nothing to do
+         if len(self.tsInfo) == 0:
+             self.verbose_logger.info(_('Trying to run the transaction but nothing to do. Exiting.'))
+-            return 1
++            return -1
+ 
+         # NOTE: In theory we can skip this in -q -y mode, for a slight perf.
+         #       gain. But it's probably doom to have a different code path.
+@@ -495,7 +495,7 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+         if self._promptWanted():
+             if not self.userconfirm():
+                 self.verbose_logger.info(_('Exiting on user Command'))
+-                return 1
++                return -1
+ 
+         self.verbose_logger.log(yum.logginglevels.INFO_2,
+             _('Downloading Packages:'))
+@@ -506,7 +506,7 @@
+ 
+         # Check GPG signatures
+         if self.gpgsigcheck(downloadpkgs) != 0:
+-            return 1
++            return -1
+         
+         if self.conf.rpm_check_debug:
+             rcd_st = time.time()
+diff --git a/shell.py b/shell.py
+index 7eef413..999bffc 100644
+--- a/shell.py
++++ b/shell.py
+@@ -355,11 +355,13 @@ class YumShell(cmd.Cmd):
+                 if e.errno == 32:
+                     self.logger.critical('\n\nExiting on Broken Pipe')
+             else:
+-                if returnval not in [0,1]:
++                if returnval not in [0,1,-1]:
+                     self.verbose_logger.info('Transaction encountered a serious error.')
+                 else:
+                     if returnval == 1:
+                         self.verbose_logger.info('There were non-fatal errors in the transaction')
++                    elif returnval == -1:
++                        self.verbose_logger.info("Transaction didn't start")
+                     self.verbose_logger.log(logginglevels.INFO_2,
+                         'Finished Transaction')
+                 self.base.closeRpmDB()
+diff --git a/yummain.py b/yummain.py
+index ea85926..e3efd10 100755
+--- a/yummain.py
++++ b/yummain.py
+@@ -228,6 +228,8 @@ def main(args):
+         return_code = result
+         if base._ts_save_file:
+             verbose_logger.info(_("Your transaction was saved, rerun it with: yum load-transaction %s") % base._ts_save_file)
++    elif return_code < 0:
++        return_code = 1 # Means the pre-transaction checks failed...
+     else:
+         verbose_logger.log(logginglevels.INFO_2, _('Complete!'))
+ 

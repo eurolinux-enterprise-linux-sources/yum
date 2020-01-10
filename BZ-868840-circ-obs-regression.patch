@@ -1,0 +1,180 @@
+commit 66ee4b50ca08818f12f496eb233786709e2687b2
+Author: James Antill <james@and.org>
+Date:   Wed Jun 13 10:08:59 2012 -0400
+
+    Add obsoletes testcase for openssl in current rawhide.
+
+diff --git a/test/simpleobsoletestests.py b/test/simpleobsoletestests.py
+index 70dde98..55e6f14 100644
+--- a/test/simpleobsoletestests.py
++++ b/test/simpleobsoletestests.py
+@@ -624,6 +624,28 @@ class SimpleObsoletesTests(OperationsTests):
+         # self.assert_(res=='err', msg)
+         self.assertResult([])
+ 
++    def testRLOpenSSLMess1(self):
++        osl1  = FakePackage('openssl',      '1.0.0', '1', arch='i386')
++        osl1.addProvides('libssl.1', 'EQ', ('0', '1', '1'))
++        osl2  = FakePackage('openssl',      '1.0.1', '1', arch='i386')
++        osll2 = FakePackage('openssl-libs', '1.0.1', '1', arch='i386')
++        osll2.addProvides('libssl.2', 'EQ', ('0', '2', '1'))
++        osll2.addObsoletes('openssl', 'LT', (None, '1.0.1', None))
++
++        oc1   = FakePackage('openconnect',  '2.0.1', '1', arch='i386')
++        oc1.addRequires('openssl', 'GE', ('0', '0.9.9', '1'))
++        oc2   = FakePackage('openconnect',  '2.0.2', '1', arch='i386')
++        oc2.addRequires('openssl', 'GE', ('0', '0.9.9', '1'))
++
++        res, msg = self.runOperation(['upgrade', 'openssl'],
++                                     [oc1, osl1],
++                                     [oc1, oc2, osl1, osl2, osll2])
++
++        # In theory don't need to upgrade oc1 => oc2
++        self.assertResult((oc2, osl2, osll2))
++
++
++
+ class GitMetapackageObsoletesTests(OperationsTests):
+ 
+     @staticmethod
+commit 245916806ef2cb306a59607593e80816c55b5f86
+Author: James Antill <james@and.org>
+Date:   Mon Oct 29 15:07:14 2012 -0400
+
+    Add circular obsoletes tests for transaction members. BZ 868840
+
+diff --git a/test/simpleobsoletestests.py b/test/simpleobsoletestests.py
+index 55e6f14..e9b2c09 100644
+--- a/test/simpleobsoletestests.py
++++ b/test/simpleobsoletestests.py
+@@ -644,6 +644,67 @@ class SimpleObsoletesTests(OperationsTests):
+         # In theory don't need to upgrade oc1 => oc2
+         self.assertResult((oc2, osl2, osll2))
+ 
++    def testCircObs1(self):
++        c1 = FakePackage('test-ccc', '0.1', '1')
++        c2 = FakePackage('test-ccc', '0.2', '2')
++        c2.addObsoletes('test-ddd', None, (None, None, None))
++
++        d1 = FakePackage('test-ddd', '0.1', '1')
++        d2 = FakePackage('test-ddd', '0.2', '2')
++        d2.addObsoletes('test-ccc', None, (None, None, None))
++
++        res, msg = self.runOperation(['upgrade'],
++                                     [c1, d1],
++                                     [c1, d1, c2, d2])
++
++        self.assertResult((c2, d2))
++
++    def testCircObs2(self):
++        c1 = FakePackage('test-ccc', '0.1', '1')
++        c2 = FakePackage('test-ccc', '0.2', '2')
++        c2.addObsoletes('test-ddd', None, (None, None, None))
++
++        d1 = FakePackage('test-ddd', '0.1', '1')
++        d2 = FakePackage('test-ddd', '0.2', '2')
++        d2.addObsoletes('test-ccc', None, (None, None, None))
++
++        res, msg = self.runOperation(['upgrade', 'test-ccc', 'test-ddd'],
++                                     [c1, d1],
++                                     [c1, d1, c2, d2])
++
++        self.assertResult((c2, d2))
++
++    def testCircObs3(self):
++        c1 = FakePackage('test-ccc', '0.1', '1')
++        c2 = FakePackage('test-ccc', '0.2', '2')
++        c2.addObsoletes('test-ddd', None, (None, None, None))
++
++        d1 = FakePackage('test-ddd', '0.1', '1')
++        d2 = FakePackage('test-ddd', '0.2', '2')
++        d2.addObsoletes('test-ccc', None, (None, None, None))
++
++        res, msg = self.runOperation(['upgrade', 'test-ccc'],
++                                     [c1, d1],
++                                     [c1, d1, c2, d2])
++
++        # Just c2 is fine too, although less likely what the user wants
++        self.assertResult((c2,d2))
++
++    def testCircObs4(self):
++        c1 = FakePackage('test-ccc', '0.1', '1')
++        c2 = FakePackage('test-ccc', '0.2', '2')
++        c2.addObsoletes('test-ddd', None, (None, None, None))
++
++        d1 = FakePackage('test-ddd', '0.1', '1')
++        d2 = FakePackage('test-ddd', '0.2', '2')
++        d2.addObsoletes('test-ccc', None, (None, None, None))
++
++        res, msg = self.runOperation(['upgrade', 'test-ddd'],
++                                     [c1, d1],
++                                     [c1, d1, c2, d2])
++
++        # Just d2 is fine too, although less likely what the user wants
++        self.assertResult((c2,d2))
+ 
+ 
+ class GitMetapackageObsoletesTests(OperationsTests):
+commit f865fcf372f12b5e70c95fe5ce56f49d7a40b6c1
+Author: James Antill <james@and.org>
+Date:   Mon Oct 29 15:08:25 2012 -0400
+
+    Fix circular obsoletes in transaction members check. BZ 868840.
+
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 5e95662..a16f1f5 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -911,6 +911,9 @@ class Depsolve(object):
+                             if otxmbr.output_state not in TS_INSTALL_STATES:
+                                 continue
+                             if otxmbr.po.obsoletedBy([txmbr.po]):
++                                if txmbr.po.obsoletedBy([otxmbr.po]):
++                                    # Have to deal with loops!
++                                    continue
+                                 self.tsInfo.remove(otxmbr.pkgtup)
+                                 #  We need to remove an obsoleted entry that
+                                 # was maybe used to resolve something ... ?
+commit 38efcc50239a81743512b6b0b071cbbfaa9d7d12
+Author: James Antill <james@and.org>
+Date:   Mon Jun 18 16:26:13 2012 -0400
+
+    A solution to the obsoletes but don't provide problem. BZ 834530.
+
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 449cf48..5e95662 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -485,12 +485,30 @@ class Depsolve(object):
+             # try to update the requiring package in hopes that all this problem goes away :(
+             self.verbose_logger.log(logginglevels.DEBUG_2, _('Trying to update %s to resolve dep'), requiringPo)
+             txmbrs = self.update(po=requiringPo, requiringPo=requiringPo)
++            fixed = False
+             if not txmbrs:
+                 msg = self._err_missing_requires(requiringPo, requirement)
+-                self.verbose_logger.log(logginglevels.DEBUG_2, _('No update paths found for %s. Failure!'), requiringPo)
++                self.verbose_logger.log(logginglevels.DEBUG_2, _('No update paths found for %s. Failure due to requirement: %s!'), requiringPo, msg)
++            else:
++                req_lookup = (needname, needflags,
++                              rpmUtils.miscutils.stringToVersion(needversion))
++
++            for txmbr in txmbrs:
++                #  This works for upgrades, and for obsoletes, on one side.
++                # Also catches upgrades that don't work on the other.
++                if txmbr.output_state in TS_INSTALL_STATES:
++                    if txmbr.po.checkPrco('requires', req_lookup):
++                        fixed = False
++                        break
++                    else:
++                        fixed = True
++            if txmbrs and not fixed:
++                msg = self._err_missing_requires(requiringPo, requirement)
++                self.verbose_logger.log(logginglevels.DEBUG_2, _("Update for %s. Doesn't fix requirement: %s!"), requiringPo, msg)
++
++            if not fixed:
+                 return self._requiringFromTransaction(requiringPo, requirement, errorlist)
+             checkdeps = 1
+-
+             
+         if needmode in ['e']:
+             self.verbose_logger.log(logginglevels.DEBUG_2, _('TSINFO: %s package requiring %s marked as erase'),

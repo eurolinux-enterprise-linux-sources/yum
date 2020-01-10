@@ -1,0 +1,1646 @@
+commit d2c806ae70be38881f3a1000fd5bd7354a8fed0e
+Author: James Antill <james@and.org>
+Date:   Sat Jan 29 17:31:30 2011 -0500
+
+    Show from_repo in history output, if available.
+
+Tue Aug 16 Florian Festi
+
+Removed section that adds
+
++            executeSQL(self._conn.cursor(), "PRAGMA locking_mode = EXCLUSIVE")
+
+to history.py as it is suspected to cause #730291.
+
+Fri Sep 09 2011 Nils Philippsen
+
+change default of history_list_view to "users", as that was the default before
+this patch was applied.
+
+diff --git a/output.py b/output.py
+index 04b718b..08fe0e3 100755
+--- a/output.py
++++ b/output.py
+@@ -1619,6 +1619,18 @@ to exit.
+ 
+             self._historyInfoCmd(mobj)
+ 
++    def _hpkg2from_repo(self, hpkg):
++        """ Given a pkg, find the ipkg.ui_from_repo ... if none, then
++            get an apkg. ... and put a ? in there. """
++        ipkgs = self.rpmdb.searchPkgTuple(hpkg.pkgtup)
++        if not ipkgs:
++            apkgs = self.pkgSack.searchPkgTuple(hpkg.pkgtup)
++            if not apkgs:
++                return '?'
++            return '@?' + str(apkgs[0].repoid)
++
++        return ipkgs[0].ui_from_repo
++
+     def _historyInfoCmd(self, old, pats=[]):
+         name = self._pwd_ui_username(old.loginuid)
+ 
+@@ -1631,7 +1643,8 @@ to exit.
+                                           _pkg_states_available.values())])[-1]
+         _pkg_states_installed['maxlen'] = maxlen
+         _pkg_states_available['maxlen'] = maxlen
+-        def _simple_pkg(pkg, prefix_len, was_installed=False, highlight=False):
++        def _simple_pkg(pkg, prefix_len, was_installed=False, highlight=False,
++                        pkg_max_len=0):
+             prefix = " " * prefix_len
+             if was_installed:
+                 _pkg_states = _pkg_states_installed
+@@ -1655,7 +1668,9 @@ to exit.
+             else:
+                 (hibeg, hiend) = self._highlight('normal')
+             state = utf8_width_fill(state, _pkg_states['maxlen'])
+-            print "%s%s%s%s %s" % (prefix, hibeg, state, hiend, hpkg)
++            print "%s%s%s%s %-*s %s" % (prefix, hibeg, state, hiend,
++                                        pkg_max_len, hpkg,
++                                        self._hpkg2from_repo(hpkg))
+ 
+         if type(old.tid) == type([]):
+             print _("Transaction ID :"), "%u..%u" % (old.tid[0], old.tid[-1])
+@@ -1732,24 +1747,31 @@ to exit.
+                     print _("Additional non-default information stored: %d" 
+                                 % len(non_default))
+ 
+-        print _("Transaction performed with:")
++        if old.trans_with:
++            # This is _possible_, but not common
++            print _("Transaction performed with:")
++            pkg_max_len = max((len(str(hpkg)) for hpkg in old.trans_with))
+         for hpkg in old.trans_with:
+-            _simple_pkg(hpkg, 4, was_installed=True)
++            _simple_pkg(hpkg, 4, was_installed=True, pkg_max_len=pkg_max_len)
+         print _("Packages Altered:")
+         self.historyInfoCmdPkgsAltered(old, pats)
+ 
+         if old.trans_skip:
+             print _("Packages Skipped:")
++            pkg_max_len = max((len(str(hpkg)) for hpkg in old.trans_skip))
+         for hpkg in old.trans_skip:
+-            _simple_pkg(hpkg, 4)
++            _simple_pkg(hpkg, 4, pkg_max_len=pkg_max_len)
+ 
+         if old.rpmdb_problems:
+             print _("Rpmdb Problems:")
+         for prob in old.rpmdb_problems:
+             key = "%s%s: " % (" " * 4, prob.problem)
+             print self.fmtKeyValFill(key, prob.text)
++            if prob.packages:
++                pkg_max_len = max((len(str(hpkg)) for hpkg in prob.packages))
+             for hpkg in prob.packages:
+-                _simple_pkg(hpkg, 8, was_installed=True, highlight=hpkg.main)
++                _simple_pkg(hpkg, 8, was_installed=True, highlight=hpkg.main,
++                            pkg_max_len=pkg_max_len)
+ 
+         if old.output:
+             print _("Scriptlet output:")
+@@ -1783,10 +1805,13 @@ to exit.
+         # version in the transaction and now.
+         all_uistates = self._history_state2uistate
+         maxlen = 0
++        pkg_max_len = 0
+         for hpkg in old.trans_data:
+             uistate = all_uistates.get(hpkg.state, hpkg.state)
+             if maxlen < len(uistate):
+                 maxlen = len(uistate)
++            if pkg_max_len < len(str(hpkg)):
++                pkg_max_len = len(str(hpkg))
+ 
+         for hpkg in old.trans_data:
+             prefix = " " * 4
+@@ -1813,18 +1838,18 @@ to exit.
+                   hpkg.state == 'Update'):
+                 ln = len(hpkg.name) + 1
+                 cn = (" " * ln) + cn[ln:]
+-                print "%s%s%s%s %s" % (prefix, hibeg, uistate, hiend, cn)
+             elif (last is not None and
+                   last.state == 'Downgrade' and last.name == hpkg.name and
+                   hpkg.state == 'Downgraded'):
+                 ln = len(hpkg.name) + 1
+                 cn = (" " * ln) + cn[ln:]
+-                print "%s%s%s%s %s" % (prefix, hibeg, uistate, hiend, cn)
+             else:
+                 last = None
+                 if hpkg.state in ('Updated', 'Downgrade'):
+                     last = hpkg
+-                print "%s%s%s%s %s" % (prefix, hibeg, uistate, hiend, cn)
++            print "%s%s%s%s %-*s %s" % (prefix, hibeg, uistate, hiend,
++                                        pkg_max_len, cn,
++                                        self._hpkg2from_repo(hpkg))
+ 
+     def historySummaryCmd(self, extcmds):
+         tids, printall = self._history_list_transactions(extcmds)
+commit ab4d2c5a52c571928313eb8ffeafed17b4101260
+Author: James Antill <james@and.org>
+Date:   Thu Apr 14 14:02:05 2011 -0400
+
+     Add history_list_view, and change default to single-user-commands. BZ 692780.
+    
+     users            = display users (old behaviour).
+     commands         = display cmdline.
+     single-user-cmds = display cmdline if only a single user, and >= 50% of
+                        entries have a cmd line
+    
+    ...also adds documentation to yum.conf and yum.
+
+diff --git a/docs/yum.8 b/docs/yum.8
+index 39c7253..522f15f 100644
+--- a/docs/yum.8
++++ b/docs/yum.8
+@@ -345,6 +345,9 @@ an offset from the last transaction (Eg. if you've done 250 transactions,
+ The addon-info command takes a transaction ID, and the packages-list command
+ takes a package (with wildcards).
+ 
++In "history list" you can change the behaviour of the 2nd column via. the
++configuration option history_list_view.
++
+ In "history list" output the Altered column also gives some extra information
+ if there was something not good with the transaction (this is also shown at the
+ end of the package column in the packages-list command).
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index 2e0d6ea..e6037c2 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -357,6 +357,19 @@ normally be necessary to add packages here. Not that this is also used for the
+ packages to look for in \-\-version. Defaults to rpm, yum, yum-metadata-parser.
+ 
+ .IP
++\fBhistory_list_view \fR
++Which column of information to display in the "yum history list" command. There
++are currently three options: users, cmds (or commands), auto.
++
++Older versions of yum acted like "users", which always outputs the user who
++initiated the yum transaction. You can now specify "commands" which will instead
++always output the command line of the transaction. You can also specify
++"single-user-commands" which will display the users if there are more than one,
++otherwise it will display the command line.
++
++You can also specify "default" which currently selects "single-user-commands".
++
++.IP
+ \fBcommands\fR
+ List of functional commands to run if no functional commands are specified
+ on the command line (eg. "update foo bar baz quux").  None of the short options
+diff --git a/output.py b/output.py
+index 85b21f8..cf541f8 100755
+--- a/output.py
++++ b/output.py
+@@ -1441,24 +1441,53 @@ to exit.
+         if tids is None:
+             return 1, ['Failed history list']
+ 
++        limit = 20
++        if printall:
++            limit = None
++
++        old_tids = self.history.old(tids, limit=limit)
++        done = 0
++        if self.conf.history_list_view == 'users':
++            uids = [1,2]
++        elif self.conf.history_list_view == 'commands':
++            uids = [1]
++        else:
++            assert self.conf.history_list_view == 'single-user-commands'
++            uids = set()
++            blanks = 0
++            for old in old_tids:
++                if not printall and done >= limit:
++                    break
++
++                done += 1
++                if old.cmdline is None:
++                    blanks += 1
++                uids.add(old.loginuid)
++            if len(uids) == 1 and blanks > (done / 2):
++                uids.add('blah')
++
+         fmt = "%s | %s | %s | %s | %s"
++        if len(uids) == 1:
++            name = _("Command line")
++        else:
++            name = _("Login user")
+         print fmt % (utf8_width_fill(_("ID"), 6, 6),
+-                     utf8_width_fill(_("Login user"), 24, 24),
++                     utf8_width_fill(name, 24, 24),
+                      utf8_width_fill(_("Date and time"), 16, 16),
+                      utf8_width_fill(_("Action(s)"), 14, 14),
+                      utf8_width_fill(_("Altered"), 7, 7))
+         print "-" * 79
+         fmt = "%6u | %s | %-16.16s | %s | %4u"
+         done = 0
+-        limit = 20
+-        if printall:
+-            limit = None
+-        for old in self.history.old(tids, limit=limit):
++        for old in old_tids:
+             if not printall and done >= limit:
+                 break
+ 
+             done += 1
+-            name = self._pwd_ui_username(old.loginuid, 24)
++            if len(uids) == 1:
++                name = old.cmdline or ''
++            else:
++                name = self._pwd_ui_username(old.loginuid, 24)
+             tm = time.strftime("%Y-%m-%d %H:%M",
+                                time.localtime(old.beg_timestamp))
+             num, uiacts = self._history_uiactions(old.trans_data)
+diff --git a/yum/config.py b/yum/config.py
+index 8c966f8..d09511f 100644
+--- a/yum/config.py
++++ b/yum/config.py
+@@ -746,6 +746,13 @@ class YumConf(StartupConf):
+     loadts_ignorerpm = BoolOption(False)
+     
+     clean_requirements_on_remove = BoolOption(False)
++
++
++    history_list_view = SelectionOption('single-user-commands',
++                                        ('single-user-commands', 'users',
++                                         'commands'),
++                                     mapper={'cmds'          : 'commands',
++                                             'default' :'single-user-commands'})
+     _reposlist = []
+ 
+     def dump(self):
+commit 4e65dea2b03091bf59aeb19a113ac5ecc42cc04e
+Author: James Antill <james@and.org>
+Date:   Wed Apr 20 17:29:00 2011 -0400
+
+    Allow "last" usage in merged transactions.
+
+diff --git a/output.py b/output.py
+index cf541f8..07c1d56 100755
+--- a/output.py
++++ b/output.py
+@@ -1367,6 +1367,14 @@ to exit.
+         ''' Convert a user "TID" string of 2..4 into: (2, 4). '''
+         def str2int(x):
+             try:
++                if x == 'last' or x.startswith('last-'):
++                    tid = old.tid
++                    if x.startswith('last-'):
++                        off = int(x[len('last-'):])
++                        if off <= 0:
++                            int("z")
++                        tid -= off
++                    return tid
+                 return int(x)
+             except ValueError:
+                 return None
+commit 3f18b7daecc82e3c9a6609cd7c48d697b159aa26
+Author: James Antill <james@and.org>
+Date:   Wed Apr 20 17:31:30 2011 -0400
+
+    Fail quickly for merged transactions of 123..xyz etc., which are invalid.
+
+diff --git a/output.py b/output.py
+index 07c1d56..71e4e24 100755
+--- a/output.py
++++ b/output.py
+@@ -1391,6 +1391,9 @@ to exit.
+         if etid > old.tid:
+             return None
+ 
++        if btid is None or etid is None:
++            return None
++
+         # Have a range ... do a "merged" transaction.
+         if btid > etid:
+             btid, etid = etid, btid
+commit fd6a000a1a3feeaed693b3bc17171990971a17e2
+Author: James Antill <james@and.org>
+Date:   Wed Apr 20 17:41:48 2011 -0400
+
+    Add history rollback command.
+
+diff --git a/docs/yum.8 b/docs/yum.8
+index 522f15f..ede03b9 100644
+--- a/docs/yum.8
++++ b/docs/yum.8
+@@ -77,7 +77,7 @@ gnome\-packagekit application\&.
+ .br
+ .I \fR * version [ all | installed | available | group-* | nogroups* | grouplist | groupinfo ]
+ .br
+-.I \fR * history [info|list|packages-list|summary|redo|undo|new|addon-info] 
++.I \fR * history [info|list|packages-list|summary|addon-info|redo|undo|rollback|new] 
+ .br
+ .I \fR * check
+ .br 
+@@ -331,16 +331,21 @@ and so takes sub-commands:
+ .IP "\fBhistory\fP"
+ The history command allows the user to view what has happened in past
+ transactions (assuming the history_record config. option is set). You can use
+-info/list/summary to view what happened, undo/redo to act on that information
+-and new to start a new history file.
++info/list/packages-list/summary to view what happened, undo/redo/rollback to act
++on that information and new to start a new history file.
+ 
+ The info/list/summary commands take either a transaction id or a package (with
+ wildcards, as in \fBSpecifying package names\fP), all three can also be passed
+ no arguments. list can be passed the keyword "all" to list all the transactions.
+ 
+-The undo/redo commands take either a transaction id or the keyword last and
+-an offset from the last transaction (Eg. if you've done 250 transactions,
++The packages-list command takes a package  (with wildcards, as in
++\fBSpecifying package names\fP).
++
++The undo/redo/rollback commands take either a transaction id or the keyword last
++and an offset from the last transaction (Eg. if you've done 250 transactions,
+ "last" refers to transaction 250, and "last-4" refers to transaction 246).
++The undo/redo commands will act on the specified transaction, while the rollback
++command will undo all transactions upto the point of the specified transaction.
+ 
+ The addon-info command takes a transaction ID, and the packages-list command
+ takes a package (with wildcards).
+diff --git a/yumcommands.py b/yumcommands.py
+index d3014c5..74a1f00 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -1350,7 +1350,7 @@ class HistoryCommand(YumCommand):
+         return ['history']
+ 
+     def getUsage(self):
+-        return "[info|list|summary|addon-info|package-list|redo|undo|new]"
++        return "[info|list|packages-list|summary|addon-info|redo|undo|rollback|new]"
+ 
+     def getSummary(self):
+         return _("Display, or use, the transaction history")
+@@ -1375,11 +1375,52 @@ class HistoryCommand(YumCommand):
+         if base.history_undo(old):
+             return 2, ["Undoing transaction %u" % (old.tid,)]
+ 
++    def _hcmd_rollback(self, base, extcmds):
++        force = False
++        if len(extcmds) > 1 and extcmds[1] == 'force':
++            force = True
++            extcmds = extcmds[:]
++            extcmds.pop(0)
++
++        old = base._history_get_transaction(extcmds)
++        if old is None:
++            return 1, ['Failed history rollback, no transaction']
++        last = base.history.last()
++        if last is None:
++            return 1, ['Failed history rollback, no last?']
++        if old.tid == last.tid:
++            return 0, ['Rollback to current, nothing to do']
++
++        mobj = None
++        for tid in base.history.old(range(old.tid + 1, last.tid + 1)):
++            if not force and (tid.altered_lt_rpmdb or tid.altered_gt_rpmdb):
++                if tid.altered_lt_rpmdb:
++                    msg = "Transaction history is incomplete, before %u."
++                else:
++                    msg = "Transaction history is incomplete, after %u."
++                print msg % tid.tid
++                print " You can use 'history rollback force', to try anyway."
++                return 1, ['Failed history rollback, incomplete']
++
++            if mobj is None:
++                mobj = yum.history.YumMergedHistoryTransaction(tid)
++            else:
++                mobj.merge(tid)
++
++        tm = time.ctime(old.beg_timestamp)
++        print "Rollback to transaction %u, from %s" % (old.tid, tm)
++        print base.fmtKeyValFill("  Undoing the following transactions: ",
++                                 ", ".join((str(x) for x in mobj.tid)))
++        base.historyInfoCmdPkgsAltered(mobj)
++        if base.history_undo(mobj):
++            return 2, ["Rollback to transaction %u" % (old.tid,)]
++
+     def _hcmd_new(self, base, extcmds):
+         base.history._create_db_file()
+ 
+     def doCheck(self, base, basecmd, extcmds):
+         cmds = ('list', 'info', 'summary', 'repeat', 'redo', 'undo', 'new',
++                'rollback',
+                 'addon', 'addon-info',
+                 'pkg', 'pkgs', 'pkg-list', 'pkgs-list',
+                 'package', 'package-list', 'packages', 'packages-list')
+@@ -1387,7 +1428,7 @@ class HistoryCommand(YumCommand):
+             base.logger.critical(_('Invalid history sub-command, use: %s.'),
+                                  ", ".join(cmds))
+             raise cli.CliError
+-        if extcmds and extcmds[0] in ('repeat', 'redo', 'undo', 'new'):
++        if extcmds and extcmds[0] in ('repeat', 'redo', 'undo', 'rollback', 'new'):
+             checkRootUID(base)
+             checkGPGKey(base)
+         elif not os.access(base.history._db_file, os.R_OK):
+@@ -1415,6 +1456,8 @@ class HistoryCommand(YumCommand):
+             ret = self._hcmd_undo(base, extcmds)
+         elif vcmd in ('redo', 'repeat'):
+             ret = self._hcmd_redo(base, extcmds)
++        elif vcmd == 'rollback':
++            ret = self._hcmd_rollback(base, extcmds)
+         elif vcmd == 'new':
+             ret = self._hcmd_new(base, extcmds)
+ 
+@@ -1426,7 +1469,7 @@ class HistoryCommand(YumCommand):
+         vcmd = 'list'
+         if extcmds:
+             vcmd = extcmds[0]
+-        return vcmd in ('repeat', 'redo', 'undo')
++        return vcmd in ('repeat', 'redo', 'undo', 'rollback')
+ 
+ 
+ class CheckRpmdbCommand(YumCommand):
+commit 32e9e034492a25daec4a8d762dc4a9e03f088aae
+Author: James Antill <james@and.org>
+Date:   Tue Apr 26 15:45:21 2011 -0400
+
+    Try to do a better explanation of how history undo/redo/rollback work.
+
+diff --git a/docs/yum.8 b/docs/yum.8
+index ede03b9..1b5d161 100644
+--- a/docs/yum.8
++++ b/docs/yum.8
+@@ -341,11 +341,20 @@ no arguments. list can be passed the keyword "all" to list all the transactions.
+ The packages-list command takes a package  (with wildcards, as in
+ \fBSpecifying package names\fP).
+ 
+-The undo/redo/rollback commands take either a transaction id or the keyword last
+-and an offset from the last transaction (Eg. if you've done 250 transactions,
+-"last" refers to transaction 250, and "last-4" refers to transaction 246).
+-The undo/redo commands will act on the specified transaction, while the rollback
+-command will undo all transactions upto the point of the specified transaction.
++The undo/redo/rollback commands take either a single transaction id or the
++keyword last and an offset from the last transaction (Eg. if you've done 250
++transactions, "last" refers to transaction 250, and "last-4" refers to
++transaction 246).
++
++The undo/redo commands act on the specified transaction, undo'ing or repeating
++the work of that transaction. While the rollback command will undo all
++transactions upto the point of the specified transaction. For example, if you
++have 3 transactions, where package A; B and C where installed respectively.
++Then "undo 1" will try to remove pacakge A, "redo 1" will try to install package
++A (if it is not still installed), and "rollback 1" will try to remove packages
++B and C. Note that after a "rollback 1" you will have a fourth transaction,
++although the ending rpmdb version (see: yum version) should be the same in
++transactions 1 and 4.
+ 
+ The addon-info command takes a transaction ID, and the packages-list command
+ takes a package (with wildcards).
+commit 42225a155b371cc9e5dc3c7207c770f66c27502b
+Author: James Antill <james@and.org>
+Date:   Mon Aug 1 11:06:20 2011 -0400
+
+    Add load-ts to yum man page.
+
+diff --git a/docs/yum.8 b/docs/yum.8
+index ea18f34..a1375de 100644
+--- a/docs/yum.8
++++ b/docs/yum.8
+@@ -71,6 +71,8 @@ gnome\-packagekit application\&.
+ .br
+ .I \fR * history [info|list|packages-list|summary|addon-info|redo|undo|rollback|new] 
+ .br
++.I \fR * load-transaction [txfile]
++.br
+ .I \fR * check
+ .br 
+ .I \fR * help [command] 
+@@ -371,6 +373,15 @@ end of the package column in the packages-list command).
+ .I \fBs\fR - The transaction completed fine, but --skip-broken was enabled and had to skip some packages.
+ .br
+ 
++
++.IP
++.IP "\fBload-transaction\fP"
++This command will re-load a saved yum transaction file, this allows you to
++run a transaction on one machine and then use it on another.
++The two common ways to get a saved yum transaction file are from
++"yum -q history addon-info last saved_tx" or via. the automatic saves in
++$TMPDIR/yum_save_tx.* when a transaction is solved but not run.
++
+ .IP
+ .IP "\fBcheck\fP"
+ Checks the local rpmdb and produces information on any problems it finds. You
+commit be3f47980206b418bc752950dbc4c8a09d5889b6
+Author: James Antill <james@and.org>
+Date:   Mon Jun 20 15:27:45 2011 -0400
+
+    Add message to history redo/undo for when nothing is done.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 8fa957f..bfb94f0 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -3837,7 +3837,8 @@ class YumBase(depsolve.Depsolve):
+                 if len(availpkgs) > 1:
+                     availpkgs = self._compare_providers(availpkgs, requiringPo)
+                     availpkgs = map(lambda x: x[0], availpkgs)
+-
++                elif not availpkgs:
++                    self.logger.warning(_("No package matched to upgrade: %s"), self._ui_nevra_dict(nevra_dict))
+        
+         # for any thing specified
+         # get the list of available pkgs matching it (or take the po)
+@@ -4027,7 +4028,7 @@ class YumBase(depsolve.Depsolve):
+ 
+                 if len(pkgs) == 0:
+                     if not kwargs.get('silence_warnings', False):
+-                        self.logger.warning(_("No package matched to remove"))
++                        self.logger.warning(_("No package matched to remove: %s"), self._ui_nevra_dict(nevra_dict))
+ 
+         ts = self.rpmdb.readOnlyTS()
+         kern_pkgtup = misc.get_running_kernel_pkgtup(ts)
+@@ -4439,6 +4440,32 @@ class YumBase(depsolve.Depsolve):
+             tx_return.extend(txmbrs)
+ 
+         return tx_return
++
++    @staticmethod
++    def _ui_nevra_dict(nevra_dict):
++        n = nevra_dict['name']
++        e = nevra_dict['epoch']
++        v = nevra_dict['version']
++        r = nevra_dict['release']
++        a = nevra_dict['arch']
++
++        if e and v and r:
++            evr = '%s:%s-%s' % (e, v, r)
++        elif v and r:
++            evr = '%s-%s' % (e, v, r)
++        elif e and v:
++            evr = '%s:%s' % (e, v)
++        elif v: # e and r etc. is just too weird to print
++            evr = v
++        else:
++            evr = ''
++        if n and evr:
++            return '%s-%s' % (n, evr)
++        if evr:
++            return '*-%s' % evr
++        if n:
++            return n
++        return '<unknown>'
+         
+     def _nevra_kwarg_parse(self, kwargs):
+             
+@@ -4492,6 +4519,8 @@ class YumBase(depsolve.Depsolve):
+             if pkg.state == 'Update':
+                 if self.update(pkgtup=pkg.pkgtup):
+                     done = True
++                else:
++                    self.logger.critical(_('Failed to upgrade: %s'), pkg)
+         for pkg in transaction.trans_data:
+             if pkg.state in ('Install', 'True-Install', 'Obsoleting'):
+                 if self.install(pkgtup=pkg.pkgtup):
+@@ -4529,6 +4558,8 @@ class YumBase(depsolve.Depsolve):
+             if pkg.state == 'Downgraded':
+                 if self.update(pkgtup=pkg.pkgtup):
+                     done = True
++                else:
++                    self.logger.critical(_('Failed to upgrade: %s'), pkg)
+         for pkg in transaction.trans_data:
+             if pkg.state == 'Obsoleting':
+                 #  Note that obsoleting can mean anything, so if this is part of
+commit 1a193447dc63f0bac4bbd572e034f369445e1cf1
+Author: James Antill <james@and.org>
+Date:   Tue Jun 28 15:13:12 2011 -0400
+
+     Disable the rpmtrans chroot workaround. Use exclusive locking in history.
+    
+     The only downside here appears to be that we get .sqlite-journal files
+    in /var/lib/yum/history ... which is probably fine.
+     Also tested fine as a normal user, with read-only access.
+
+diff --git a/yum/history.py b/yum/history.py
+index 26d6ee2..5385bd1 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -747,7 +755,6 @@ class YumHistory:
+                          WHERE tid = ? AND pkgtupid = ? AND state = ?
+                          """, ('TRUE', self._tid, pid, state))
+         self._commit()
+-        return cur.lastrowid
+ 
+     def _trans_rpmdb_problem(self, problem):
+         if not hasattr(self, '_tid'):
+@@ -1310,6 +1317,9 @@ class YumHistory:
+                                     'sqlite')
+         if self._db_file == _db_file:
+             os.rename(_db_file, _db_file + '.old')
++            # Just in case ... move the journal file too.
++            if os.path.exists(_db_file + '-journal'):
++                os.rename(_db_file  + '-journal', _db_file + '-journal.old')
+         self._db_file = _db_file
+         
+         if self.conf.writable and not os.path.exists(self._db_file):
+commit 53b0bb6088ff96659398e25ae81551feaa725121
+Author: James Antill <james@and.org>
+Date:   Wed Aug 3 14:02:41 2011 -0400
+
+     Add extra history DB data, rpmdb and yumdb. BZ 662243.
+    
+     This does a few things, the only really user visible part though is
+    that "yum history info" will now get the from_repo data from the history
+    DB ... if available. And the history DB will get bigger :).
+     The history package class is also tweaked so that YumHistoryPackage objects
+    now act a lot more like YumHeaderPackage objects (using rpmdb/yumdb
+    data).
+    
+     We also change pkg2pid() so that you can "lookup" a pkg. to see if it's
+    in the history, without changing the DB.
+
+diff --git a/output.py b/output.py
+index 9610232..00a938d 100755
+--- a/output.py
++++ b/output.py
+@@ -2002,6 +2002,9 @@ to exit.
+     def _hpkg2from_repo(self, hpkg):
+         """ Given a pkg, find the ipkg.ui_from_repo ... if none, then
+             get an apkg. ... and put a ? in there. """
++        if 'from_repo' in hpkg.yumdb_info:
++            return hpkg.ui_from_repo
++
+         ipkgs = self.rpmdb.searchPkgTuple(hpkg.pkgtup)
+         if not ipkgs:
+             apkgs = self.pkgSack.searchPkgTuple(hpkg.pkgtup)
+diff --git a/yum/__init__.py b/yum/__init__.py
+index b29dc80..fe312ce 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -881,7 +881,8 @@ class YumBase(depsolve.Depsolve):
+         if self._history is None:
+             pdb_path = self.conf.persistdir + "/history"
+             self._history = yum.history.YumHistory(root=self.conf.installroot,
+-                                                   db_path=pdb_path)
++                                                   db_path=pdb_path,
++                                                   releasever=self.conf.yumvar['releasever'])
+         return self._history
+     
+     # properties so they auto-create themselves with defaults
+@@ -1647,6 +1648,9 @@ class YumBase(depsolve.Depsolve):
+                 elif loginuid is not None:
+                     po.yumdb_info.installed_by = str(loginuid)
+ 
++                if self.conf.history_record:
++                    self.history.sync_alldb(po)
++
+         # Remove old ones after installing new ones, so we can copy values.
+         for txmbr in self.tsInfo:
+             if txmbr.output_state in TS_INSTALL_STATES:
+diff --git a/yum/history.py b/yum/history.py
+index 5385bd1..609394f 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -97,9 +97,58 @@ def _setupHistorySearchSQL(patterns=None, ignore_case=False):
+     return (need_full, patterns, fields, False)
+ # ---- horrible Copy and paste from sqlitesack ----
+ 
++class _YumHistPackageYumDB:
++    """ Class to pretend to be yumdb_info for history packages. """
++
++    def __init__(self, pkg):
++        self._pkg = pkg
++
++    _valid_yumdb_keys = set(["command_line",
++                             "from_repo", "from_repo_revision",
++                             "from_repo_timestamp",
++                             "installed_by", "changed_by",
++                             "reason", "releasever"])
++    def __getattr__(self, attr):
++        """ Load yumdb attributes from the history sqlite. """
++        pkg = self._pkg
++        if attr.startswith('_'):
++            raise AttributeError, "%s has no yum attribute %s" % (pkg, attr)
++
++        if attr not in self._valid_yumdb_keys:
++            raise AttributeError, "%s has no yum attribute %s" % (pkg, attr)
++
++        val = pkg._history._load_yumdb_key(pkg, attr)
++        if False and val is None:
++            raise AttributeError, "%s has no yum attribute %s" % (pkg, attr)
++
++        if val is None:
++            return None
++
++        val = str(val) or ""
++        setattr(self, attr, val)
++
++        return val
++
++    def __contains__(self, attr):
++        #  This is faster than __iter__ and it makes things fail in a much more
++        # obvious way in weird FS corruption cases like: BZ 593436
++        x = self.get(attr)
++        return x is not None
++
++    def get(self, attr, default=None):
++        """retrieve an add'l data obj"""
++
++        try:
++            res = getattr(self, attr)
++        except AttributeError:
++            return default
++        return res
++
++
+ class YumHistoryPackage(PackageObject):
+ 
+-    def __init__(self, name, arch, epoch, version, release, checksum=None):
++    def __init__(self, name, arch, epoch, version, release, checksum=None,
++                 history=None):
+         self.name    = name
+         self.version = version
+         self.release = release
+@@ -111,21 +160,69 @@ class YumHistoryPackage(PackageObject):
+             self._checksums = [] # (type, checksum, id(0,1)
+         else:
+             chk = checksum.split(':')
+-            self._checksums = [(chk[0], chk[1], 0)] # (type, checksum, id(0,1))
++            self._checksums = [(chk[0], chk[1], 1)] # (type, checksum, id(0,1))
+         # Needed for equality comparisons in PackageObject
+         self.repoid = "<history>"
+ 
++        self._history = history
++        self.yumdb_info = _YumHistPackageYumDB(self)
++
++    _valid_rpmdb_keys = set(["buildtime", "buildhost",
++                             "license", "packager",
++                             "size", "sourcerpm", "url", "vendor",
++                             # ?
++                             "committer", "committime"])
++    def __getattr__(self, attr):
++        """ Load rpmdb attributes from the history sqlite. """
++        if attr.startswith('_'):
++            raise AttributeError, "%s has no attribute %s" % (self, attr)
++
++        if attr not in self._valid_rpmdb_keys:
++            raise AttributeError, "%s has no attribute %s" % (self, attr)
++
++        val = self._history._load_rpmdb_key(self, attr)
++        if False and val is None:
++            raise AttributeError, "%s has no attribute %s" % (self, attr)
++
++        if val is None:
++            return None
++
++        val = str(val) or ""
++        setattr(self, attr, val)
++
++        return val
++
++    def _ui_from_repo(self):
++        """ This reports the repo the package is from, we integrate YUMDB info.
++            for RPM packages so a package from "fedora" that is installed has a
++            ui_from_repo of "@fedora". Note that, esp. with the --releasever
++            option, "fedora" or "rawhide" isn't authoritive.
++            So we also check against the current releasever and if it is
++            different we also print the YUMDB releasever. This means that
++            installing from F12 fedora, while running F12, would report as
++            "@fedora/13". """
++        if 'from_repo' in self.yumdb_info:
++            self._history.releasever
++            end = ''
++            if (self._history.releasever is not None and
++                'releasever' in self.yumdb_info and
++                self.yumdb_info.releasever != self._history.releasever):
++                end = '/' + self.yumdb_info.releasever
++            return '@' + self.yumdb_info.from_repo + end
++        return self.repoid
++    ui_from_repo = property(fget=lambda self: self._ui_from_repo())
++
++
+ class YumHistoryPackageState(YumHistoryPackage):
+-    def __init__(self, name,arch, epoch,version,release, state, checksum=None):
++    def __init__(self, name,arch, epoch,version,release, state, checksum=None,
++                 history=None):
+         YumHistoryPackage.__init__(self, name,arch, epoch,version,release,
+-                                   checksum)
++                                   checksum, history)
+         self.done  = None
+         self.state = state
+ 
+-        self.repoid = '<history>'
+-
+ 
+-class YumHistoryRpmdbProblem(PackageObject):
++class YumHistoryRpmdbProblem:
+     """ Class representing an rpmdb problem that existed at the time of the
+         transaction. """
+ 
+@@ -328,7 +425,8 @@ class YumMergedHistoryTransaction(YumHistoryTransaction):
+     @staticmethod
+     def _conv_pkg_state(pkg, state):
+         npkg = YumHistoryPackageState(pkg.name, pkg.arch,
+-                                      pkg.epoch,pkg.version,pkg.release, state)
++                                      pkg.epoch,pkg.version,pkg.release, state,
++                                      pkg._history)
+         npkg._checksums = pkg._checksums
+         npkg.done = pkg.done
+         if _sttxt2stcode[npkg.state] in TS_INSTALL_STATES:
+@@ -557,7 +655,7 @@ class YumMergedHistoryTransaction(YumHistoryTransaction):
+ class YumHistory:
+     """ API for accessing the history sqlite data. """
+ 
+-    def __init__(self, root='/', db_path=_history_dir):
++    def __init__(self, root='/', db_path=_history_dir, releasever=None):
+         self._conn = None
+         
+         self.conf = yum.misc.GenericHolder()
+@@ -568,6 +666,8 @@ class YumHistory:
+         self.conf.writable = False
+         self.conf.readable = True
+ 
++        self.releasever = releasever
++
+         if not os.path.exists(self.conf.db_path):
+             try:
+                 os.makedirs(self.conf.db_path)
+@@ -644,7 +744,7 @@ class YumHistory:
+             self._conn.close()
+             self._conn = None
+ 
+-    def _pkgtup2pid(self, pkgtup, checksum=None):
++    def _pkgtup2pid(self, pkgtup, checksum=None, create=True):
+         cur = self._get_cursor()
+         executeSQL(cur, """SELECT pkgtupid, checksum FROM pkgtups
+                            WHERE name=? AND arch=? AND
+@@ -659,6 +759,9 @@ class YumHistory:
+             if checksum == sql_checksum:
+                 return sql_pkgtupid
+         
++        if not create:
++            return None
++
+         (n,a,e,v,r) = pkgtup
+         (n,a,e,v,r) = (to_unicode(n),to_unicode(a),
+                        to_unicode(e),to_unicode(v),to_unicode(r))
+@@ -674,23 +777,28 @@ class YumHistory:
+                                 (name, arch, epoch, version, release)
+                                 VALUES (?, ?, ?, ?, ?)""", (n,a,e,v,r))
+         return cur.lastrowid
+-    def _apkg2pid(self, po):
++    def _apkg2pid(self, po, create=True):
+         csum = po.returnIdSum()
+         if csum is not None:
+             csum = "%s:%s" % (str(csum[0]), str(csum[1]))
+-        return self._pkgtup2pid(po.pkgtup, csum)
+-    def _ipkg2pid(self, po):
++        return self._pkgtup2pid(po.pkgtup, csum, create)
++    def _ipkg2pid(self, po, create=True):
+         csum = None
+         yumdb = po.yumdb_info
+         if 'checksum_type' in yumdb and 'checksum_data' in yumdb:
+             csum = "%s:%s" % (yumdb.checksum_type, yumdb.checksum_data)
+-        return self._pkgtup2pid(po.pkgtup, csum)
+-    def pkg2pid(self, po):
++        return self._pkgtup2pid(po.pkgtup, csum, create)
++    def _hpkg2pid(self, po, create=False):
++        return self._apkg2pid(po, create)
++
++    def pkg2pid(self, po, create=True):
+         if isinstance(po, YumInstalledPackage):
+-            return self._ipkg2pid(po)
++            return self._ipkg2pid(po, create)
+         if isinstance(po, YumAvailablePackage):
+-            return self._apkg2pid(po)
+-        return self._pkgtup2pid(po.pkgtup, None)
++            return self._apkg2pid(po, create)
++        if isinstance(po, YumHistoryPackage):
++            return self._hpkg2pid(po, create)
++        return self._pkgtup2pid(po.pkgtup, None, create)
+ 
+     @staticmethod
+     def txmbr2state(txmbr):
+@@ -984,7 +1092,8 @@ class YumHistory:
+                       ORDER BY name ASC, epoch ASC""", (tid,))
+         ret = []
+         for row in cur:
+-            obj = YumHistoryPackage(row[0],row[1],row[2],row[3],row[4], row[5])
++            obj = YumHistoryPackage(row[0],row[1],row[2],row[3],row[4], row[5],
++                                    history=self)
+             ret.append(obj)
+         return ret
+     def _old_data_pkgs(self, tid):
+@@ -998,7 +1107,7 @@ class YumHistory:
+         ret = []
+         for row in cur:
+             obj = YumHistoryPackageState(row[0],row[1],row[2],row[3],row[4],
+-                                         row[7], row[5])
++                                         row[7], row[5], history=self)
+             obj.done     = row[6] == 'TRUE'
+             obj.state_installed = None
+             if _sttxt2stcode[obj.state] in TS_INSTALL_STATES:
+@@ -1018,7 +1127,8 @@ class YumHistory:
+                       ORDER BY name ASC, epoch ASC""", (tid,))
+         ret = []
+         for row in cur:
+-            obj = YumHistoryPackage(row[0],row[1],row[2],row[3],row[4], row[5])
++            obj = YumHistoryPackage(row[0],row[1],row[2],row[3],row[4], row[5],
++                                    history=self)
+             ret.append(obj)
+         return ret
+     def _old_prob_pkgs(self, rpid):
+@@ -1032,7 +1142,8 @@ class YumHistory:
+                       ORDER BY name ASC, epoch ASC""", (rpid,))
+         ret = []
+         for row in cur:
+-            obj = YumHistoryPackage(row[0],row[1],row[2],row[3],row[4], row[5])
++            obj = YumHistoryPackage(row[0],row[1],row[2],row[3],row[4], row[5],
++                                    history=self)
+             obj.main = row[6] == 'TRUE'
+             ret.append(obj)
+         return ret
+@@ -1151,6 +1262,94 @@ class YumHistory:
+         assert len(ret) == 1
+         return ret[0]
+ 
++    def _load_anydb_key(self, pkg, db, attr):
++        cur = self._get_cursor()
++        if cur is None or not self._update_db_file_3():
++            return None
++
++        pid = self.pkg2pid(pkg, create=False)
++        if pid is None:
++            return None
++
++        sql = """SELECT %(db)sdb_val FROM pkg_%(db)sdb
++                  WHERE pkgtupid=? and %(db)sdb_key=? """ % {'db' : db}
++        executeSQL(cur, sql, (pid, attr))
++        for row in cur:
++            return row[0]
++
++        return None
++
++    def _load_rpmdb_key(self, pkg, attr):
++        return self._load_anydb_key(pkg, "rpm", attr)
++    def _load_yumdb_key(self, pkg, attr):
++        return self._load_anydb_key(pkg, "yum", attr)
++
++    def _save_anydb_key(self, pkg, db, attr, val):
++        cur = self._get_cursor()
++        if cur is None or not self._update_db_file_3():
++            return None
++
++        pid = self.pkg2pid(pkg, create=False)
++        if pid is None:
++            return None
++
++        sql = """INSERT INTO pkg_%(db)sdb (pkgtupid, %(db)sdb_key, %(db)sdb_val)
++                        VALUES (?, ?, ?)""" % {'db' : db}
++        executeSQL(cur, sql, (pid, attr, val))
++        for row in cur:
++            return row[0]
++
++        return None
++
++    def _save_rpmdb_key(self, pkg, attr, val):
++        return self._save_anydb_key(pkg, "rpm", attr, val)
++    def _save_yumdb_key(self, pkg, attr, val):
++        return self._save_anydb_key(pkg, "yum", attr, val)
++
++    def _save_rpmdb(self, ipkg):
++        """ Save all the data for rpmdb for this installed pkg, assumes
++            there is no data currently. """
++        for attr in YumHistoryPackage._valid_rpmdb_keys:
++            val = getattr(ipkg, attr, None)
++            if val is None:
++                continue
++            self._save_anydb_key(ipkg, "rpm", attr, val)
++
++    def _save_yumdb(self, ipkg):
++        """ Save all the data for yumdb for this installed pkg, assumes
++            there is no data currently. """
++        for attr in _YumHistPackageYumDB._valid_yumdb_keys:
++            val = ipkg.yumdb_info.get(attr)
++            if val is None:
++                continue
++            self._save_anydb_key(ipkg, "yum", attr, val)
++
++    def _wipe_anydb(self, pkg, db):
++        """ Delete all the data for rpmdb/yumdb for this installed pkg. """
++        cur = self._get_cursor()
++        if cur is None or not self._update_db_file_3():
++            return False
++
++        pid = self.pkg2pid(pkg, create=False)
++        if pid is None:
++            return False
++
++        sql = """DELETE FROM pkg_%(db)sdb WHERE pkgtupid=?""" % {'db' : db}
++        executeSQL(cur, sql, (pid,))
++
++        return True
++
++    def sync_alldb(self, ipkg):
++        """ Sync. all the data for rpmdb/yumdb for this installed pkg. """
++        if not self._wipe_anydb(ipkg, "rpm"):
++            return False
++        self._wipe_anydb(ipkg, "yum")
++        if not self._save_rpmdb(ipkg):
++            return False
++        self._save_yumdb(ipkg)
++        self._commit()
++        return True
++
+     def _yieldSQLDataList(self, patterns, fields, ignore_case):
+         """Yields all the package data for the given params. """
+ 
+@@ -1220,6 +1419,47 @@ class YumHistory:
+             tids.add(row[0])
+         return tids
+ 
++    _update_ops_3 = ['''\
++\
++ CREATE TABLE pkg_rpmdb (
++     pkgtupid INTEGER NOT NULL REFERENCES pkgtups,
++     rpmdb_key TEXT NOT NULL,
++     rpmdb_val TEXT NOT NULL);
++''', '''\
++ CREATE INDEX i_pkgkey_rpmdb ON pkg_rpmdb (pkgtupid, rpmdb_key);
++''', '''\
++ CREATE TABLE pkg_yumdb (
++     pkgtupid INTEGER NOT NULL REFERENCES pkgtups,
++     yumdb_key TEXT NOT NULL,
++     yumdb_val TEXT NOT NULL);
++''', '''\
++ CREATE INDEX i_pkgkey_yumdb ON pkg_yumdb (pkgtupid, yumdb_key);
++''']
++
++    def _update_db_file_3(self):
++        """ Update to version 3 of history, rpmdb/yumdb data. """
++        if not self._update_db_file_2():
++            return False
++
++        if hasattr(self, '_cached_updated_3'):
++            return self._cached_updated_3
++
++        cur = self._get_cursor()
++        if cur is None:
++            return False
++
++        executeSQL(cur, "PRAGMA table_info(pkg_yumdb)")
++        #  If we get anything, we're fine. There might be a better way of
++        # saying "anything" but this works.
++        for ob in cur:
++            break
++        else:
++            for op in self._update_ops_3:
++                cur.execute(op)
++            self._commit()
++        self._cached_updated_3 = True
++        return True
++
+     _update_ops_2 = ['''\
+ \
+  CREATE TABLE trans_skip_pkgs (
+@@ -1374,6 +1614,8 @@ class YumHistory:
+             cur.execute(op)
+         for op in self._update_ops_2:
+             cur.execute(op)
++        for op in self._update_ops_3:
++            cur.execute(op)
+         self._commit()
+ 
+ # Pasted from sqlitesack
+commit fb5434395ed74d6f730dbf7b3f3201e322c9d14e
+Author: James Antill <james@and.org>
+Date:   Wed Aug 3 14:08:56 2011 -0400
+
+     Add stats/pkg-info/sync history commands, so we can use/see the new
+    rpmdb/yumdb data.
+
+diff --git a/output.py b/output.py
+index 00a938d..da34382 100755
+--- a/output.py
++++ b/output.py
+@@ -47,6 +47,8 @@ import yum.history
+ 
+ from yum.i18n import utf8_width, utf8_width_fill, utf8_text_fill
+ 
++import locale
++
+ def _term_width():
+     """ Simple terminal width, limit to 20 chars. and make 0 == 80. """
+     if not hasattr(urlgrabber.progress, 'terminal_width_cached'):
+@@ -2445,6 +2447,92 @@ to exit.
+             if lastdbv.end_rpmdbversion != rpmdbv:
+                 self._rpmdb_warn_checks()
+ 
++    def historyPackageInfoCmd(self, extcmds):
++        """Print information about packages in history transactions.
++
++        :param extcmds: list of extra command line arguments
++        """
++        tids = self.history.search(extcmds)
++        limit = None
++        if extcmds and not tids:
++            self.logger.critical(_('Bad transaction IDs, or package(s), given'))
++            return 1, ['Failed history packages-info']
++        if not tids:
++            limit = 20
++
++        all_uistates = self._history_state2uistate
++
++        num = 0
++        for old in self.history.old(tids, limit=limit):
++            if limit is not None and num and (num +len(old.trans_data)) > limit:
++                break
++            last = None
++
++            for hpkg in old.trans_data: # Find a pkg to go with each cmd...
++                if limit is None:
++                    x,m,u = yum.packages.parsePackages([hpkg], extcmds)
++                    if not x and not m:
++                        continue
++
++                uistate = all_uistates.get(hpkg.state, hpkg.state)
++                if num:
++                    print ""
++                print _("Transaction ID :"), old.tid
++                tm = time.ctime(old.beg_timestamp)
++                print _("Begin time     :"), tm
++                print _("Package        :"), hpkg.ui_nevra
++                print _("State          :"), uistate
++                if hpkg.size is not None:
++                    num = int(hpkg.size)
++                    print _("Size           :"), locale.format("%d", num, True)
++                if hpkg.buildhost is not None:
++                    print _("Build host     :"), hpkg.buildhost
++                if hpkg.buildtime is not None:
++                    tm = time.ctime(int(hpkg.buildtime))
++                    print _("Build time     :"), tm
++                if hpkg.packager is not None:
++                    print _("Packager       :"), hpkg.packager
++                if hpkg.vendor is not None:
++                    print _("Vendor         :"), hpkg.vendor
++                if hpkg.license is not None:
++                    print _("License        :"), hpkg.license
++                if hpkg.url is not None:
++                    print _("URL            :"), hpkg.url
++                if hpkg.sourcerpm is not None:
++                    print _("Source RPM     :"), hpkg.sourcerpm
++                if hpkg.committime is not None:
++                    tm = time.ctime(int(hpkg.committime))
++                    print _("Commit Time    :"), tm
++                if hpkg.committer is not None:
++                    print _("Committer      :"), hpkg.committer
++                if hpkg.yumdb_info.reason is not None:
++                    print _("Reason         :"), hpkg.yumdb_info.reason
++                if hpkg.yumdb_info.command_line is not None:
++                    print _("Command Line   :"), hpkg.yumdb_info.command_line
++                if hpkg.yumdb_info.from_repo is not None:
++                    print _("From repo      :"), hpkg.yumdb_info.from_repo
++                if hpkg.yumdb_info.installed_by is not None:
++                    uid = int(hpkg.yumdb_info.installed_by)
++                    name = self._pwd_ui_username(uid)
++                    print _("Installed by   :"), name
++                if hpkg.yumdb_info.changed_by is not None:
++                    uid = int(hpkg.yumdb_info.changed_by)
++                    name = self._pwd_ui_username(uid)
++                    print _("Changed by     :"), name
++
++                num += 1
++
++        # And, again, copy and paste...
++        lastdbv = self.history.last()
++        if lastdbv is None:
++            self._rpmdb_warn_checks(warn=False)
++        else:
++            #  If this is the last transaction, is good and it doesn't
++            # match the current rpmdb ... then mark it as bad.
++            rpmdbv  = self.rpmdb.simpleVersion(main_only=True)[0]
++            if lastdbv.end_rpmdbversion != rpmdbv:
++                self._rpmdb_warn_checks()
++
+ 
+ class DepSolveProgressCallBack:
+     """provides text output callback functions for Dependency Solver callback"""
+diff --git a/yum/history.py b/yum/history.py
+index 609394f..c91c33a 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -1350,6 +1350,35 @@ class YumHistory:
+         self._commit()
+         return True
+ 
++    def _pkg_stats(self):
++        """ Some stats about packages in the DB. """
++
++        ret = {'nevrac' : 0,
++               'nevra'  : 0,
++               'nevr'   : 0,
++               'na'     : 0,
++               'rpmdb'  : 0,
++               'yumdb'  : 0,
++               }
++        cur = self._get_cursor()
++        if cur is None or not self._update_db_file_3():
++            return False
++
++        data = (('nevrac', "COUNT(*)",                      "pkgtups"),
++                ('na',     "COUNT(DISTINCT(name || arch))", "pkgtups"),
++                ('nevra',"COUNT(DISTINCT(name||version||epoch||release||arch))",
++                 "pkgtups"),
++                ('nevr',   "COUNT(DISTINCT(name||version||epoch||release))",
++                 "pkgtups"),
++                ('rpmdb',  "COUNT(DISTINCT(pkgtupid))", "pkg_rpmdb"),
++                ('yumdb',  "COUNT(DISTINCT(pkgtupid))", "pkg_yumdb"))
++
++        for key, bsql, esql in data:
++            executeSQL(cur, "SELECT %s FROM %s" % (bsql, esql))
++            for row in cur:
++                ret[key] = row[0]
++        return ret
++
+     def _yieldSQLDataList(self, patterns, fields, ignore_case):
+         """Yields all the package data for the given params. """
+ 
+diff --git a/yumcommands.py b/yumcommands.py
+index 3a985c3..d9c70f3 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -2425,6 +2425,36 @@ class HistoryCommand(YumCommand):
+     def _hcmd_new(self, base, extcmds):
+         base.history._create_db_file()
+ 
++    def _hcmd_stats(self, base, extcmds):
++        print "File        :", base.history._db_file
++        num = os.stat(base.history._db_file).st_size
++        print "Size        :", locale.format("%d", num, True)
++        counts = base.history._pkg_stats()
++        trans_1 = base.history.old("1")[0]
++        trans_N = base.history.last()
++        print _("Transactions:"), trans_N.tid
++        print _("Begin time  :"), time.ctime(trans_1.beg_timestamp)
++        print _("End time    :"), time.ctime(trans_N.end_timestamp)
++        print _("Counts      :")
++        print _("  NEVRAC :"), locale.format("%6d", counts['nevrac'], True)
++        print _("  NEVRA  :"), locale.format("%6d", counts['nevra'],  True)
++        print _("  NA     :"), locale.format("%6d", counts['na'],     True)
++        print _("  NEVR   :"), locale.format("%6d", counts['nevr'],   True)
++        print _("  rpm DB :"), locale.format("%6d", counts['rpmdb'],  True)
++        print _("  yum DB :"), locale.format("%6d", counts['yumdb'],  True)
++
++    def _hcmd_sync(self, base, extcmds):
++        extcmds = extcmds[1:]
++        if not extcmds:
++            extcmds = None
++        for ipkg in sorted(base.rpmdb.returnPackages(patterns=extcmds)):
++            if base.history.pkg2pid(ipkg, create=False) is None:
++                continue
++
++            print "Syncing rpm/yum DB data for:", ipkg, "...",
++            base.history.sync_alldb(ipkg)
++            print "Done."
++
+     def doCheck(self, base, basecmd, extcmds):
+         cmds = ('list', 'info', 'summary', 'repeat', 'redo', 'undo', 'new',
+                 'rollback',
+@@ -2437,8 +2467,10 @@ class HistoryCommand(YumCommand):
+         cmds = ('list', 'info', 'summary', 'repeat', 'redo', 'undo', 'new',
+                 'rollback',
+                 'addon', 'addon-info',
++                'stats', 'statistics', 'sync', 'synchronize'
+                 'pkg', 'pkgs', 'pkg-list', 'pkgs-list',
+-                'package', 'package-list', 'packages', 'packages-list')
++                'package', 'package-list', 'packages', 'packages-list',
++                'pkg-info', 'pkgs-info', 'package-info', 'packages-info')
+         if extcmds and extcmds[0] not in cmds:
+             base.logger.critical(_('Invalid history sub-command, use: %s.'),
+                                  ", ".join(cmds))
+@@ -2488,6 +2520,12 @@ class HistoryCommand(YumCommand):
+             ret = self._hcmd_rollback(base, extcmds)
+         elif vcmd == 'new':
+             ret = self._hcmd_new(base, extcmds)
++        elif vcmd in ('stats', 'statistics'):
++            ret = self._hcmd_stats(base, extcmds)
++        elif vcmd in ('sync', 'synchronize'):
++            ret = self._hcmd_sync(base, extcmds)
++        elif vcmd in ('pkg-info', 'pkgs-info', 'package-info', 'packages-info'):
++            ret = base.historyPackageInfoCmd(extcmds)
+ 
+         if ret is None:
+             return 0, ['history %s' % (vcmd,)]
+commit a4b5c4cd6a670a2a9332bd0f7957c280b4bbad37
+Author: James Antill <james@and.org>
+Date:   Wed Aug 3 14:13:19 2011 -0400
+
+    Add some docs. for the new history commands.
+
+diff --git a/docs/yum.8 b/docs/yum.8
+index a1375de..255c755 100644
+--- a/docs/yum.8
++++ b/docs/yum.8
+@@ -69,7 +69,7 @@ gnome\-packagekit application\&.
+ .br
+ .I \fR * version [ all | installed | available | group-* | nogroups* | grouplist | groupinfo ]
+ .br
+-.I \fR * history [info|list|packages-list|summary|addon-info|redo|undo|rollback|new] 
++.I \fR * history [info|list|packages-list|packages-info|summary|addon-info|redo|undo|rollback|new|sync|stats] 
+ .br
+ .I \fR * load-transaction [txfile]
+ .br
+@@ -323,15 +323,17 @@ and so takes sub-commands:
+ .IP "\fBhistory\fP"
+ The history command allows the user to view what has happened in past
+ transactions (assuming the history_record config. option is set). You can use
+-info/list/packages-list/summary to view what happened, undo/redo/rollback to act
+-on that information and new to start a new history file.
++info/list/packages-list/packages-info/summary to view what happened,
++undo/redo/rollback to act on that information and new to start a new history
++file.
+ 
+ The info/list/summary commands take either a transaction id or a package (with
+ wildcards, as in \fBSpecifying package names\fP), all three can also be passed
+ no arguments. list can be passed the keyword "all" to list all the transactions.
+ 
+-The packages-list command takes a package  (with wildcards, as in
+-\fBSpecifying package names\fP).
++The packages-list/packages-info commands takes a package  (with wildcards, as in
++\fBSpecifying package names\fP). And show data from the point of view of that
++package.
+ 
+ The undo/redo/rollback commands take either a single transaction id or the
+ keyword last and an offset from the last transaction (Eg. if you've done 250
+@@ -351,6 +353,12 @@ transactions 1 and 4.
+ The addon-info command takes a transaction ID, and the packages-list command
+ takes a package (with wildcards).
+ 
++The stats command shows some statistics about the current history DB.
++
++The sync commands allows you to change the rpmdb/yumdb data stored for any
++installed packages, to whaever is in the current rpmdb/yumdb (this is mostly
++useful when this data was not stored when the package went into the history DB).
++
+ In "history list" you can change the behaviour of the 2nd column via. the
+ configuration option history_list_view.
+ 
+commit 1972be85d2fab2b9862ed8779b81a0eb0c1d7064
+Author: James Antill <james@and.org>
+Date:   Fri Mar 25 15:35:35 2011 -0400
+
+    Add "distro-sync full", which will reinstall packages due to checksums.
+
+diff --git a/cli.py b/cli.py
+index 2267b86..eca1812 100644
+--- a/cli.py
++++ b/cli.py
+@@ -757,6 +757,13 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+             installed version is older or newer. We allow "selection" but not
+             local packages (use tmprepo, or something). """
+ 
++        level = 'diff'
++        if userlist and userlist[0] in ('full', 'diff', 'different'):
++            level = userlist[0]
++            userlist = userlist[1:]
++            if level == 'different':
++                level = 'diff'
++
+         dupdates = []
+         ipkgs = {}
+         for pkg in sorted(self.rpmdb.returnPackages(patterns=userlist)):
+@@ -794,8 +801,31 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+ 
+             ipkg = ipkgs[ipkgname]
+             apkg = apkgs[ipkgname]
+-            if ipkg.verEQ(apkg):
++            if ipkg.verEQ(apkg): # Latest installed == Latest avail.
++                if level == 'diff':
++                    continue
++
++                # level == full: do reinstalls if checksum doesn't match.
++                #                do removals, if older installed versions.
++                for napkg in self.rpmdb.searchNames([ipkgname]):
++                    if (not self.allowedMultipleInstalls(apkg) and
++                        not napkg.verEQ(ipkg)):
++                        dupdates.extend(self.remove(po=napkg))
++                        continue
++
++                    nayi = napkg.yumdb_info
++                    for apkg in self.pkgSack.searchPkgTuple(napkg.pkgtup):
++                        if ('checksum_type' in nayi and
++                            'checksum_data' in nayi and
++                            nayi.checksum_type == apkg.checksum_type and
++                            nayi.checksum_data == apkg.pkgId):
++                            found = True
++                            break
++                    if found:
++                        continue
++                    dupdates.extend(self.reinstall(pkgtup=napkg.pkgtup))
+                 continue
++
+             if self.allowedMultipleInstalls(apkg):
+                 found = False
+                 for napkg in self.rpmdb.searchNames([apkg.name]):
+commit 755f4f71426b3a25375bc25d3373395ece7b0b4a
+Author: James Antill <james@and.org>
+Date:   Fri Aug 19 12:27:11 2011 -0400
+
+    Convert rpm/yumdb values to unicode, or python/sqlite will die. BZ 730365.
+
+diff --git a/yum/history.py b/yum/history.py
+index c91c33a..6449708 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -1295,7 +1295,7 @@ class YumHistory:
+ 
+         sql = """INSERT INTO pkg_%(db)sdb (pkgtupid, %(db)sdb_key, %(db)sdb_val)
+                         VALUES (?, ?, ?)""" % {'db' : db}
+-        executeSQL(cur, sql, (pid, attr, val))
++        executeSQL(cur, sql, (pid, attr, to_unicode(val)))
+         for row in cur:
+             return row[0]
+ 
+commit 74732cb4341a97efbedb9cc9aa818c92d548b4e5
+Author: James Antill <james@and.org>
+Date:   Fri Aug 19 12:47:20 2011 -0400
+
+    Fix return values from sync_anydb_key()
+
+diff --git a/yum/history.py b/yum/history.py
+index 6449708..a9b12cf 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -1313,7 +1313,9 @@ class YumHistory:
+             val = getattr(ipkg, attr, None)
+             if val is None:
+                 continue
+-            self._save_anydb_key(ipkg, "rpm", attr, val)
++            if not self._save_anydb_key(ipkg, "rpm", attr, val):
++                return False
++        return True
+ 
+     def _save_yumdb(self, ipkg):
+         """ Save all the data for yumdb for this installed pkg, assumes
+@@ -1322,7 +1324,9 @@ class YumHistory:
+             val = ipkg.yumdb_info.get(attr)
+             if val is None:
+                 continue
+-            self._save_anydb_key(ipkg, "yum", attr, val)
++            if not self._save_anydb_key(ipkg, "yum", attr, val):
++                return False
++        return True
+ 
+     def _wipe_anydb(self, pkg, db):
+         """ Delete all the data for rpmdb/yumdb for this installed pkg. """
+diff --git a/yumcommands.py b/yumcommands.py
+index d9c70f3..2ab9a28 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -1440,8 +1440,10 @@
+                 continue
+ 
+             print "Syncing rpm/yum DB data for:", ipkg, "...",
+-            base.history.sync_alldb(ipkg)
+-            print "Done."
++            if base.history.sync_alldb(ipkg):
++                print "Done."
++            else:
++                print "FAILED."
+ 
+     def doCheck(self, base, basecmd, extcmds):
+         cmds = ('list', 'info', 'summary', 'repeat', 'redo', 'undo', 'new',
+
+Fri Sep 09 2011 Nils Philippsen
+
+change default of history_list_view to "users", as that was the default before
+this patch was applied.
+
+diff -up yum-3.2.29/docs/yum.conf.5.defaults yum-3.2.29/docs/yum.conf.5
+--- yum-3.2.29/docs/yum.conf.5.defaults	2011-09-09 12:53:26.229334657 +0200
++++ yum-3.2.29/docs/yum.conf.5	2011-09-09 12:57:43.826666894 +0200
+@@ -362,7 +362,7 @@ packages to look for in \-\-version. Def
+ .IP
+ \fBhistory_list_view \fR
+ Which column of information to display in the "yum history list" command. There
+-are currently three options: users, cmds (or commands), auto.
++are currently three options: users, cmds (or commands), single-user-commands.
+ 
+ Older versions of yum acted like "users", which always outputs the user who
+ initiated the yum transaction. You can now specify "commands" which will instead
+@@ -370,7 +370,7 @@ always output the command line of the tr
+ "single-user-commands" which will display the users if there are more than one,
+ otherwise it will display the command line.
+ 
+-You can also specify "default" which currently selects "single-user-commands".
++You can also specify "default" which currently selects "users".
+ 
+ .IP
+ \fBcommands\fR
+diff -up yum-3.2.29/yum/config.py.defaults yum-3.2.29/yum/config.py
+--- yum-3.2.29/yum/config.py.defaults	2011-09-09 12:53:26.235334618 +0200
++++ yum-3.2.29/yum/config.py	2011-09-09 12:56:52.700997900 +0200
+@@ -745,11 +745,11 @@ class YumConf(StartupConf):
+     clean_requirements_on_remove = BoolOption(False)
+ 
+ 
+-    history_list_view = SelectionOption('single-user-commands',
++    history_list_view = SelectionOption('users',
+                                         ('single-user-commands', 'users',
+                                          'commands'),
+                                      mapper={'cmds'          : 'commands',
+-                                             'default' :'single-user-commands'})
++                                             'default' :'users'})
+     _reposlist = []
+ 
+     def dump(self):
+commit 1e47267d7ad6aa75e2532800d33a399b3446eb8d
+Author: James Antill <james@and.org>
+Date:   Tue Sep 20 11:51:46 2011 -0400
+
+    Use the correct test to see if the INSERT worked, needed for RHEL-5 sqlite.
+
+diff --git a/yum/history.py b/yum/history.py
+index a9b12cf..bbd9bf2 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -1296,10 +1296,8 @@ class YumHistory:
+         sql = """INSERT INTO pkg_%(db)sdb (pkgtupid, %(db)sdb_key, %(db)sdb_val)
+                         VALUES (?, ?, ?)""" % {'db' : db}
+         executeSQL(cur, sql, (pid, attr, to_unicode(val)))
+-        for row in cur:
+-            return row[0]
+ 
+-        return None
++        return cur.lastrowid
+ 
+     def _save_rpmdb_key(self, pkg, attr, val):
+         return self._save_anydb_key(pkg, "rpm", attr, val)
+commit 6bee89b0dd4acbeef217b39282dbfbcfad258e36
+Author: James Antill <james@and.org>
+Date:   Tue Sep 20 11:58:24 2011 -0400
+
+    Use SQL rollback, on syncdb failure, even though it'll never happen anyway.
+
+diff --git a/yum/history.py b/yum/history.py
+index bbd9bf2..8e62f50 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -738,6 +738,8 @@ class YumHistory:
+         return self._conn.cursor()
+     def _commit(self):
+         return self._conn.commit()
++    def _rollback(self):
++        return self._conn.rollback()
+ 
+     def close(self):
+         if self._conn is not None:
+@@ -1345,10 +1347,12 @@ class YumHistory:
+         """ Sync. all the data for rpmdb/yumdb for this installed pkg. """
+         if not self._wipe_anydb(ipkg, "rpm"):
+             return False
+-        self._wipe_anydb(ipkg, "yum")
+-        if not self._save_rpmdb(ipkg):
++        if not (self._wipe_anydb(ipkg, "yum") and
++                self._save_rpmdb(ipkg) and
++                self._save_yumdb(ipkg)):
++            self._rollback()
+             return False
+-        self._save_yumdb(ipkg)
++
+         self._commit()
+         return True
+ 
+commit 789093d65d9e34e6c2d750b4eca78b52c9488f28
+Author: James Antill <james@and.org>
+Date:   Thu Aug 25 12:05:53 2011 -0400
+
+    Don't try to show repos. for skipped packages in history info.
+
+diff --git a/output.py b/output.py
+index faffd34..be4e4d9 100755
+--- a/output.py
++++ b/output.py
+@@ -2081,7 +2081,7 @@ to exit.
+         _pkg_states_installed['maxlen'] = maxlen
+         _pkg_states_available['maxlen'] = maxlen
+         def _simple_pkg(pkg, prefix_len, was_installed=False, highlight=False,
+-                        pkg_max_len=0):
++                        pkg_max_len=0, show_repo=True):
+             prefix = " " * prefix_len
+             if was_installed:
+                 _pkg_states = _pkg_states_installed
+@@ -2105,9 +2105,11 @@ to exit.
+             else:
+                 (hibeg, hiend) = self._highlight('normal')
+             state = utf8_width_fill(state, _pkg_states['maxlen'])
++            ui_repo = ''
++            if show_repo:
++                ui_repo = self._hpkg2from_repo(hpkg)
+             print "%s%s%s%s %-*s %s" % (prefix, hibeg, state, hiend,
+-                                        pkg_max_len, hpkg,
+-                                        self._hpkg2from_repo(hpkg))
++                                        pkg_max_len, hpkg, ui_repo)
+ 
+         if type(old.tid) == type([]):
+             print _("Transaction ID :"), "%u..%u" % (old.tid[0], old.tid[-1])
+@@ -2197,7 +2199,9 @@ to exit.
+             print _("Packages Skipped:")
+             pkg_max_len = max((len(str(hpkg)) for hpkg in old.trans_skip))
+         for hpkg in old.trans_skip:
+-            _simple_pkg(hpkg, 4, pkg_max_len=pkg_max_len)
++            #  Don't show the repo. here because we can't store it as they were,
++            # by definition, not installed.
++            _simple_pkg(hpkg, 4, pkg_max_len=pkg_max_len, show_repo=False)
+ 
+         if old.rpmdb_problems:
+             print _("Rpmdb Problems:")

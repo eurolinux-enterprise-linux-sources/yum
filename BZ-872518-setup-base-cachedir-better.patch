@@ -1,0 +1,49 @@
+commit a5e26a78e485a119f1ca77b632d0e39b6247b3f5
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Wed May 30 14:07:40 2012 +0200
+
+    set repo.old_base_cache_dir properly
+    
+    Preloading is broken for some time (since prerepoconf?)
+    as YumBase.setCacheDir() throws away the old conf.cachedir.
+    
+    - save it to _old_cachedir
+    - use that to initialize repo.old_base_cache_dir
+    - no update when new==old
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 1e4acd5..4650639 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -578,6 +578,7 @@ class YumBase(depsolve.Depsolve):
+         repo.name = to_unicode(repo.name)
+ 
+         # Set attributes not from the config file
++        repo.old_base_cache_dir = getattr(self, '_old_cachedir', '')
+         repo.basecachedir = self.conf.cachedir
+         repo.yumvar.update(self.conf.yumvar)
+         repo.cfg = parser
+@@ -5957,6 +5958,7 @@ class YumBase(depsolve.Depsolve):
+             self.prerepoconf.cachedir = cachedir
+         else:
+             self.repos.setCacheDir(cachedir)
++        self._old_cachedir = self.conf.cachedir
+         self.conf.cachedir = cachedir
+         return True # We got a new cache dir
+ 
+diff --git a/yum/repos.py b/yum/repos.py
+index bd8f1a4..4b1d52e 100644
+--- a/yum/repos.py
++++ b/yum/repos.py
+@@ -257,8 +257,9 @@ class RepoStorage:
+         
+         self._cachedir = cachedir
+         for repo in self.repos.values():
+-            repo.old_base_cache_dir = repo.basecachedir
+-            repo.basecachedir = cachedir
++            if cachedir != repo.basecachedir:
++                repo.old_base_cache_dir = repo.basecachedir
++                repo.basecachedir = cachedir
+ 
+ 
+     def setProgressBar(self, obj):

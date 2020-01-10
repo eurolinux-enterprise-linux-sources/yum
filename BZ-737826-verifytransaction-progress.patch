@@ -1,0 +1,186 @@
+commit 613742f8a397bed9422a71fb8eb4d3bc42ec4966
+Author: James Antill <james@and.org>
+Date:   Fri Dec 2 10:11:31 2011 -0500
+
+     verifyTransaction progress, creates verify_txmbr() functions on
+    RPMTransaction() and RPMBaseCallback() classes. BZ 737826.
+     Much cleaner than previous version, should fix 758488.
+
+diff --git a/output.py b/output.py
+index bc115ca..74fad36 100755
+--- a/output.py
++++ b/output.py
+@@ -2445,14 +2977,7 @@ class YumCliRPMCallBack(RPMBaseCallback):
+         # this is where a progress bar would be called
+         process = self.action[action]
+ 
+-        if not hasattr(self, '_max_action_wid'):
+-            wid1 = 0
+-            for val in self.action.values():
+-                wid_val = utf8_width(val)
+-                if wid1 < wid_val:
+-                    wid1 = wid_val
+-            self._max_action_wid = wid1
+-        wid1 = self._max_action_wid
++        wid1 = self._max_action_width()
+         
+         if type(package) not in types.StringTypes:
+             pkgname = str(package)
+@@ -2464,7 +2989,22 @@ class YumCliRPMCallBack(RPMBaseCallback):
+             percent = 0
+         else:
+             percent = (te_current*100L)/te_total
+-        
++        self._out_event(te_current, te_total, ts_current, ts_total,
++                        percent, process, pkgname, wid1)
++
++    def _max_action_width(self):
++        if not hasattr(self, '_max_action_wid_cache'):
++            wid1 = 0
++            for val in self.action.values():
++                wid_val = utf8_width(val)
++                if wid1 < wid_val:
++                    wid1 = wid_val
++            self._max_action_wid_cache = wid1
++        wid1 = self._max_action_wid_cache
++        return wid1
++
++    def _out_event(self, te_current, te_total, ts_current, ts_total,
++                   percent, process, pkgname, wid1):
+         if self.output and (sys.stdout.isatty() or te_current == te_total):
+             (fmt, wid1, wid2) = self._makefmt(percent, ts_current, ts_total,
+                                               pkgname=pkgname, wid1=wid1)
+@@ -2530,6 +3076,19 @@ class YumCliRPMCallBack(RPMBaseCallback):
+             wid2 = pnl
+         return fmt, wid1, wid2
+ 
++    def verify_txmbr(self, base, txmbr, count):
++        " Callback for post transaction when we are in verifyTransaction(). "
++        te_current = count
++        te_total   = len(base.tsInfo)
++        # self.event(txmbr.name, count, len(base.tsInfo), count, )
++
++        percent = 100 # (te_current*100L)/te_total
++        process = _('Verifying')
++        pkgname = str(txmbr.po)
++        wid1    = max(utf8_width(process), self._max_action_width())
++        self._out_event(100, 100, te_current, te_total, 
++                        percent, process, pkgname, wid1)
++
+ 
+ def progressbar(current, total, name=None):
+     """simple progress bar 50 # marks"""
+diff --git a/yum/__init__.py b/yum/__init__.py
+index eccc6b7..5c7e511 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -1537,10 +1667,13 @@ class YumBase(depsolve.Depsolve):
+         self.plugins.run('posttrans')
+         # sync up what just happened versus what is in the rpmdb
+         if not self.ts.isTsFlagSet(rpm.RPMTRANS_FLAG_TEST):
+-            self.verifyTransaction(resultobject)
++            vTcb = None
++            if hasattr(cb, 'verify_txmbr'):
++                vTcb = cb.verify_txmbr
++            self.verifyTransaction(resultobject, vTcb)
+         return resultobject
+ 
+-    def verifyTransaction(self, resultobject=None):
++    def verifyTransaction(self, resultobject=None, txmbr_cb=None):
+         """checks that the transaction did what we expected it to do. Also 
+            propagates our external yumdb info"""
+         
+@@ -1554,9 +1693,16 @@ class YumBase(depsolve.Depsolve):
+         #    that there is not also an install of this pkg in the tsInfo (reinstall)
+         # for any kind of install add from_repo to the yumdb, and the cmdline
+         # and the install reason
++
++        def _call_txmbr_cb(txmbr, count):
++            if txmbr_cb is not None:
++                count += 1
++                txmbr_cb(txmbr, count)
++            return count
+         
+         vt_st = time.time()
+         self.plugins.run('preverifytrans')
++        count = 0
+         for txmbr in self.tsInfo:
+             if txmbr.output_state in TS_INSTALL_STATES:
+                 if not self.rpmdb.contains(po=txmbr.po):
+@@ -1566,7 +1712,9 @@ class YumBase(depsolve.Depsolve):
+                                            ' but is not!' % txmbr.po))
+                     # Note: Get Panu to do te.Failed() so we don't have to
+                     txmbr.output_state = TS_FAILED
++                    count = _call_txmbr_cb(txmbr, count)
+                     continue
++                count = _call_txmbr_cb(txmbr, count)
+                 po = self.getInstalledPackageObject(txmbr.pkgtup)
+                 rpo = txmbr.po
+                 po.yumdb_info.from_repo = rpo.repoid
+@@ -1635,10 +1783,13 @@ class YumBase(depsolve.Depsolve):
+                                                ' but is not!' % txmbr.po))
+                         # Note: Get Panu to do te.Failed() so we don't have to
+                         txmbr.output_state = TS_FAILED
++                        count = _call_txmbr_cb(txmbr, count)
+                         continue
++                count = _call_txmbr_cb(txmbr, count)
+                 yumdb_item = self.rpmdb.yumdb.get_package(po=txmbr.po)
+                 yumdb_item.clean()
+             else:
++                count = _call_txmbr_cb(txmbr, count)
+                 self.verbose_logger.log(logginglevels.DEBUG_2, 'What is this? %s' % txmbr.po)
+ 
+         self.plugins.run('postverifytrans')
+diff --git a/yum/rpmtrans.py b/yum/rpmtrans.py
+index 9b265f9..24a1f9e 100644
+--- a/yum/rpmtrans.py
++++ b/yum/rpmtrans.py
+@@ -118,7 +119,11 @@ class RPMBaseCallback:
+         else:
+             msg = '%s: %s' % (package, action)
+         self.logger.info(msg)
+-            
++
++    def verify_txmbr(self, base, txmbr, count):
++        " Callback for post transaction when we are in verifyTransaction(). "
++        pass
++
+ 
+ class SimpleCliCallBack(RPMBaseCallback):
+     def __init__(self):
+@@ -139,6 +144,10 @@ class SimpleCliCallBack(RPMBaseCallback):
+         if msgs:
+             print msgs,
+ 
++    def verify_txmbr(self, base, txmbr, count):
++        " Callback for post transaction when we are in verifyTransaction(). "
++        print _("Verify: %u/%u: %s") % (count, len(base.tsInfo), txmbr)
++
+ #  This is ugly, but atm. rpm can go insane and run the "cleanup" phase
+ # without the "install" phase if it gets an exception in it's callback. The
+ # following means that we don't really need to know/care about that in the
+@@ -156,8 +165,12 @@ class _WrapNoExceptions:
+         def newFunc(*args, **kwargs):
+             try:
+                 func(*args, **kwargs)
+-            except:
+-                pass
++            except Exception, e:
++                # It's impossible to debug stuff without this:
++                try:
++                    print "Error:", "display callback failed:", e
++                except:
++                    pass
+ 
+         newFunc.__name__ = func.__name__
+         newFunc.__doc__ = func.__doc__
+@@ -565,3 +633,9 @@ class RPMTransaction:
+             self.display.errorlog(msg)
+             # FIXME - what else should we do here? raise a failure and abort?
+     
++    def verify_txmbr(self, txmbr, count):
++        " Callback for post transaction when we are in verifyTransaction(). "
++        if not hasattr(self.display, 'verify_txmbr'):
++            return
++
++        self.display.verify_txmbr(self.base, txmbr, count)

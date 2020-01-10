@@ -1,0 +1,19 @@
+commit 2da8dcbe3a2e27e08957535f92f649fdc0b09e4c
+Author: John Lau <jlau@redhat.com>
+Date:   Wed Jun 1 11:32:33 2011 -0400
+
+    Fix _retrievePublicKey() when called with repo=None. BZ 709311
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 587ee69..209c5c6 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -4491,7 +4491,7 @@ class YumBase(depsolve.Depsolve):
+         try:
+             url = misc.to_utf8(keyurl)
+             if repo is None:
+-                opts = {limit:9999}
++                opts = {'limit':9999}
+                 text = 'global/gpgkey'
+             else:
+                 #  If we have a repo. use the proxy etc. configuration for it.

@@ -1,0 +1,193 @@
+diff -up yum-3.2.29/yum/depsolve.py.old yum-3.2.29/yum/depsolve.py
+--- yum-3.2.29/yum/depsolve.py.old	2014-03-17 16:49:25.000000000 +0100
++++ yum-3.2.29/yum/depsolve.py	2014-03-17 16:55:25.977411260 +0100
+@@ -32,6 +32,7 @@ import rpm
+ 
+ from packageSack import ListPackageSack
+ from constants import *
++from packages import PackageEVR
+ import packages
+ import logginglevels
+ import Errors
+@@ -600,7 +601,7 @@ class Depsolve(object):
+             #  Always do compare providers for multiple pkgs, it deals with
+             # newest etc. ... so no need to do NewestNameArch() ... and it
+             # stops compare_providers from being clever.
+-            pkgresults = self._compare_providers(pkgs, requiringPo)
++            pkgresults = self._compare_providers(pkgs, requiringPo,req=needname)
+             best = pkgresults[0][0]
+         
+         if self.rpmdb.contains(po=best): # is it already installed?
+@@ -1203,7 +1204,7 @@ class Depsolve(object):
+         return True
+     _isPackageInstalled = isPackageInstalled
+ 
+-    def _compare_providers(self, pkgs, reqpo):
++    def _compare_providers(self, pkgs, reqpo, req=None):
+         """take the list of pkgs and score them based on the requesting package
+            return a dictionary of po=score"""
+         self.verbose_logger.log(logginglevels.DEBUG_4,
+@@ -1247,6 +1248,24 @@ class Depsolve(object):
+                 return None
+             return x
+ 
++        def _pkg2prov_version(pkg, provname):
++            ''' This converts a package into a specific version tuple for the
++            required provide. The provide _must_ be '=' and epoch=None and
++            release=None == '0'.
++               If there is 0 or 2+ matches, return None.
++               If the req does not == the provide name, return None. '''
++            ret = None
++            for prov in pkg.provides:
++                (n, f, (e, v, r)) = prov
++                if n != provname:
++                    continue
++                if f != 'EQ':
++                    continue
++                if ret is not None:
++                    return None
++                ret = (e or '0', v, r or '0')
++            return ret
++
+         #  Actual start of _compare_providers().
+ 
+         # Do a NameArch filtering, based on repo. __cmp__
+@@ -1370,6 +1389,26 @@ class Depsolve(object):
+                 
+                     pkgresults[po] += cpl*2
+                 
++        if req is not None:
++            bestnum = max(pkgresults.values())
++            prov_depsolve = {}
++            for po in pkgs:
++                if pkgresults[po] != bestnum:
++                    continue
++                evr = _pkg2prov_version(po, req)
++                if evr is None:
++                    prov_depsolve = {}
++                    break
++                prov_depsolve[po] = evr
++            if len(prov_depsolve) > 1:
++                self.verbose_logger.log(logginglevels.DEBUG_4,
++                                        _('provides vercmp: %s') % str(req))
++                newest = sorted(prov_depsolve,
++                                key = lambda x: PackageEVR(*prov_depsolve[x]))[-1]
++                self.verbose_logger.log(logginglevels.DEBUG_4,
++                                        _(' Winner: %s') % newest)
++                pkgresults[newest] += 1
++
+         #  If we have more than one "best", see what would happen if we picked
+         # each package ... ie. what things do they require that _aren't_ already
+         # installed/to-be-installed. In theory this can screw up due to:
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2014-03-17 16:49:25.000000000 +0100
++++ yum-3.2.29/yum/__init__.py	2014-03-17 17:02:07.515704895 +0100
+@@ -3150,7 +3150,8 @@ much more problems).
+             raise Errors.YumBaseError, _('No Package found for %s') % errstring
+         
+         ps = ListPackageSack(pkglist)
+-        result = self._bestPackageFromList(ps.returnNewestByNameArch())
++        result = self._bestPackageFromList(ps.returnNewestByNameArch(),
++                                           req=errstring)
+         if result is None:
+             raise Errors.YumBaseError, _('No Package found for %s') % errstring
+         
+@@ -3185,12 +3186,19 @@ much more problems).
+ 
+         return self.rpmdb.getProvides(depname, depflags, depver).keys()
+ 
+-    def _bestPackageFromList(self, pkglist):
++    def _bestPackageFromList(self, pkglist, req=None):
+         """take list of package objects and return the best package object.
+            If the list is empty, return None. 
+            
+            Note: this is not aware of multilib so make sure you're only
+-           passing it packages of a single arch group."""
++           passing it packages of a single arch group.
++
++           :param pkglist: the list of packages to return the best
++             packages from
++           :param req: the requirement from the user
++           :return: a list of the best packages from *pkglist*
++        """
++
+         
+         
+         if len(pkglist) == 0:
+@@ -3199,10 +3207,11 @@ much more problems).
+         if len(pkglist) == 1:
+             return pkglist[0]
+ 
+-        bestlist = self._compare_providers(pkglist, None)
++        bestlist = self._compare_providers(pkglist, reqpo=None, req=req)
+         return bestlist[0][0]
+ 
+-    def bestPackagesFromList(self, pkglist, arch=None, single_name=False):
++    def bestPackagesFromList(self, pkglist, arch=None, single_name=False,
++                             req=None):
+         """Takes a list of packages, returns the best packages.
+            This function is multilib aware so that it will not compare
+            multilib to singlelib packages""" 
+@@ -3223,9 +3232,9 @@ much more problems).
+                 singleLib.append(po)
+                 
+         # we now have three lists.  find the best package(s) of each
+-        multi = self._bestPackageFromList(multiLib)
+-        single = self._bestPackageFromList(singleLib)
+-        no = self._bestPackageFromList(noarch)
++        multi = self._bestPackageFromList(multiLib, req=req)
++        single = self._bestPackageFromList(singleLib, req=req)
++        no = self._bestPackageFromList(noarch, req=req)
+ 
+         if single_name and multi and single and multi.name != single.name:
+             # Sinlge _must_ match multi, if we want a single package name
+@@ -3239,7 +3248,7 @@ much more problems).
+         # if there's a noarch and it's newer than the multilib, we want
+         # just the noarch.  otherwise, we want multi + single
+         elif multi:
+-            best = self._bestPackageFromList([multi,no])
++            best = self._bestPackageFromList([multi,no], req=req)
+             if best.arch == "noarch":
+                 returnlist.append(no)
+             else:
+@@ -3247,7 +3256,7 @@ much more problems).
+                 if single: returnlist.append(single)
+         # similar for the non-multilib case
+         elif single:
+-            best = self._bestPackageFromList([single,no])
++            best = self._bestPackageFromList([single,no], req=req)
+             if best.arch == "noarch":
+                 returnlist.append(no)
+             else:
+@@ -3488,7 +3497,8 @@ much more problems).
+                         #                                all of the pkgs)
+                         if mypkgs and not misc.re_glob(arg):
+                             mypkgs = self.bestPackagesFromList(mypkgs,
+-                                                               single_name=True)
++                                                               single_name=True,
++                                                               req=arg)
+                         if mypkgs:
+                             pkgs.extend(mypkgs)
+                         
+diff -up yum-3.2.29/yum/depsolve.py.old yum-3.2.29/yum/depsolve.py
+--- yum-3.2.29/yum/depsolve.py.old	2014-04-22 15:01:17.000000000 +0200
++++ yum-3.2.29/yum/depsolve.py	2014-04-22 15:04:43.794402725 +0200
+@@ -1406,10 +1406,14 @@ class Depsolve(object):
+                 self.verbose_logger.log(logginglevels.DEBUG_4,
+                                         _('provides vercmp: %s') % str(req))
+                 newest = sorted(prov_depsolve,
+-                                key = lambda x: PackageEVR(*prov_depsolve[x]))[-1]
+-                self.verbose_logger.log(logginglevels.DEBUG_4,
+-                                        _(' Winner: %s') % newest)
+-                pkgresults[newest] += 1
++                                key = lambda x: PackageEVR(*prov_depsolve[x]))
++                for winner in reversed(newest):
++                    if prov_depsolve[winner] != prov_depsolve[newest[-1]]:
++                        break
++                    self.verbose_logger.log(logginglevels.DEBUG_4,
++                                            _(' Winner: %s') % winner)
++                    pkgresults[winner] += 1
++
+ 
+         #  If we have more than one "best", see what would happen if we picked
+         # each package ... ie. what things do they require that _aren't_ already

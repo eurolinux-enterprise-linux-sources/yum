@@ -1,0 +1,183 @@
+commit d025f8cde6233e6f7bf1bf6c12b190746a804aff
+Author: James Antill <james@and.org>
+Date:   Fri Apr 29 16:28:11 2011 -0400
+
+     Don't use .up object on package install, unless we have to.
+    
+     Huge perf. gain, now takes ~60% of time to get to y/N choice. 45%
+    when obsoletes are off.
+    
+     Somewhat ugly workaround needed to get obsoletes data.
+    
+     Also fixes bug when obsoletes are off and we install something which
+    obsoletes things (they still need to be obsoleted, as rpm will do it).
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 1291da9..740273e 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -726,7 +726,10 @@ class YumBase(depsolve.Depsolve):
+         if self.conf.debuglevel >= 7:
+             self._up.debug = 1
+         
+-        if self.conf.obsoletes:
++        if hasattr(self, '_up_obs_hack'):
++            self._up.rawobsoletes = self._up_obs_hack.rawobsoletes
++            del self._up_obs_hack
++        elif self.conf.obsoletes:
+             obs_init = time.time()    
+             #  Note: newest=True here is semi-required for repos. with multiple
+             # versions. The problem is that if pkgA-2 _accidentally_ obsoletes
+@@ -3183,7 +3186,23 @@ class YumBase(depsolve.Depsolve):
+     def _pkg2obspkg(self, po):
+         """ Given a package return the package it's obsoleted by and so
+             we should install instead. Or None if there isn't one. """
+-        thispkgobsdict = self.up.checkForObsolete([po.pkgtup])
++        if self._up is not None:
++            thispkgobsdict = self.up.checkForObsolete([po.pkgtup])
++        else:
++            #  This is pretty hacky, but saves a huge amount of time for small
++            # ops.
++            if not self.conf.obsoletes:
++                return None
++
++            if not hasattr(self, '_up_obs_hack'):
++                obs_init = time.time()
++                up = rpmUtils.updates.Updates([], [])
++                up.rawobsoletes = self.pkgSack.returnObsoletes(newest=True)
++                self.verbose_logger.debug('Obs Init time: %0.3f' % (time.time()
++                                                                    - obs_init))
++                self._up_obs_hack = up
++            thispkgobsdict = self._up_obs_hack.checkForObsolete([po.pkgtup])
++
+         if po.pkgtup in thispkgobsdict:
+             obsoleting  = thispkgobsdict[po.pkgtup]
+             oobsoleting = []
+@@ -3316,10 +3335,19 @@ class YumBase(depsolve.Depsolve):
+                     installed_pkg =  self.getInstalledPackageObject(inst_tup)
+                     yield installed_pkg
+         else:
+-            for obs_n in po.obsoletes_names:
+-                for pkg in self.rpmdb.searchNevra(name=obs_n):
+-                    if pkg.obsoletedBy([po]):
+-                        yield pkg
++            for pkg in self._find_obsoletees_direct(po):
++                yield pkg
++
++    def _find_obsoletees_direct(self, po):
++        """ Return the pkgs. that are obsoleted by the po we pass in. This works
++            directly on the package data, for two reasons:
++            1. Consulting .up. has a slow setup for small/fast ops.
++            2. We need this work even if obsoletes are turned off, because rpm
++               will be doing it for us. """
++        for obs_n in po.obsoletes_names:
++            for pkg in self.rpmdb.searchNevra(name=obs_n):
++                if pkg.obsoletedBy([po]):
++                    yield pkg
+ 
+     def _add_prob_flags(self, *flags):
+         """ Add all of the passed flags to the tsInfo.probFilterFlags array. """
+@@ -3466,7 +3494,8 @@ class YumBase(depsolve.Depsolve):
+                     continue
+             
+             # make sure this shouldn't be passed to update:
+-            if po.pkgtup in self.up.updating_dict:
++            if (self.rpmdb.searchNames([po.name]) and
++                po.pkgtup in self.up.updating_dict):
+                 txmbrs = self.update(po=po)
+                 tx_return.extend(txmbrs)
+                 continue
+@@ -3474,7 +3503,9 @@ class YumBase(depsolve.Depsolve):
+             #  Make sure we're not installing a package which is obsoleted by
+             # something else in the repo. Unless there is a obsoletion loop,
+             # at which point ignore everything.
+-            obsoleting_pkg = self._test_loop(po, self._pkg2obspkg)
++            obsoleting_pkg = None
++            if self.conf.obsoletes:
++                obsoleting_pkg = self._test_loop(po, self._pkg2obspkg)
+             if obsoleting_pkg is not None:
+                 # this is not a definitive check but it'll make sure we don't
+                 # pull in foo.i586 when foo.x86_64 already obsoletes the pkg and
+@@ -3543,8 +3574,9 @@ class YumBase(depsolve.Depsolve):
+                     break
+             
+             # it doesn't obsolete anything. If it does, mark that in the tsInfo, too
+-            if po.pkgtup in self.up.getObsoletesList(name=po.name):
+-                for obsoletee in self._find_obsoletees(po):
++            obs_pkgs = list(self._find_obsoletees_direct(po))
++            if obs_pkgs:
++                for obsoletee in obs_pkgs:
+                     txmbr = self.tsInfo.addObsoleting(po, obsoletee)
+                     self.tsInfo.addObsoleted(obsoletee, po)
+                     tx_return.append(txmbr)
+commit 329820fea5dea0a29d7ddf00265e0d430528e4d0
+Author: James Antill <james@and.org>
+Date:   Wed Sep 28 16:56:01 2011 -0400
+
+    Solve some of the obsoletes are conflicts mess. testObsoletesOffPostAvail2+
+
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 8fe4952..699a23c 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -816,6 +816,19 @@ class Depsolve(object):
+                     if checkdep:
+                         break # The next conflict might be the same pkg
+ 
++                # check Obsoletes
++                #  Atm. This is _just_ checking for transaction members which
++                # obsolete each other. Because rpm will now auto. obs. those
++                # anyway. We _don't_ check for installed pkgs. which might obs.
++                # something to be installed, even though rpm will also do that.
++                for txmbr in self.tsInfo.getMembersWithState(None, output_states=TS_INSTALL_STATES):
++                    for obs_n in txmbr.po.obsoletes_names:
++                        for otxmbr in self.tsInfo.matchNaevr(name=obs_n):
++                            if otxmbr.output_state not in TS_INSTALL_STATES:
++                                continue
++                            if otxmbr.po.obsoletedBy([txmbr.po]):
++                                self.tsInfo.remove(otxmbr.pkgtup)
++
+                 if CheckDeps:
+                     if self.dsCallback: self.dsCallback.restartLoop()
+                     self.verbose_logger.log(logginglevels.DEBUG_1, _('Restarting Loop'))
+commit e66bf77b5845a64499cdbcc6ce20d8e1d0d49e26
+Author: James Antill <james@and.org>
+Date:   Fri Oct 14 16:27:13 2011 -0400
+
+    Fix test "regression" in inst_require_obsoletes1 for ObsoletesOffPostAvail2+
+
+diff --git a/test/depsolvetests.py b/test/depsolvetests.py
+index 7af3f16..ea47b03 100644
+--- a/test/depsolvetests.py
++++ b/test/depsolvetests.py
+@@ -1130,9 +1130,10 @@ class DepsolveTests(DepsolveTests):
+         # FIXME: Does it make sense to ignore the obsoletes here? esp. as we
+         # don't ignore the conflicts above? ... I'm guessing ignoring it is
+         # by accident too? bah.
+-        # self.assertEquals('err', *self.resolveCode())
+-        self.assertEquals('ok', *self.resolveCode())
+-        self.assertResult((ipo1, po1))
++        self.assertEquals('err', *self.resolveCode())
++        # Old behaviour:
++        # self.assertEquals('ok', *self.resolveCode())
++        # self.assertResult((ipo1, po1))
+ 
+     def testUpdate_so_req_diff_arch(self):
+         rpo1 = FakePackage('foozoomer')
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 7e74880..c518311 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -849,6 +849,12 @@ class Depsolve(object):
+                                 continue
+                             if otxmbr.po.obsoletedBy([txmbr.po]):
+                                 self.tsInfo.remove(otxmbr.pkgtup)
++                                #  We need to remove an obsoleted entry that
++                                # was maybe used to resolve something ... ?
++                                CheckDeps = True
++                                self._last_req = None
++                                self.pkgSack.delPackage(otxmbr.po)
++                                self.up.delPackage(otxmbr.pkgtup)
+ 
+                 if CheckDeps:
+                     if self.dsCallback: self.dsCallback.restartLoop()

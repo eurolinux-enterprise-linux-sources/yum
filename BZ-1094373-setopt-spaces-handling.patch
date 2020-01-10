@@ -1,0 +1,12 @@
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+--- yum-3.2.29/cli.py.old	2014-05-13 16:05:31.000000000 +0200
++++ yum-3.2.29/cli.py	2014-05-13 16:07:38.505981773 +0200
+@@ -162,7 +162,7 @@ class YumBaseCli(yum.YumBase, output.Yum
+         mainopts.items = []
+ 
+         for item in setopts:
+-            k,v = item.split('=')
++            k,v = [i.strip() for i in item.split('=')]
+             period = k.rfind('.') 
+             if period != -1:
+                 repo = k[:period]

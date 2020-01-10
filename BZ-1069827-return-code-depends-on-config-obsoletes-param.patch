@@ -1,0 +1,26 @@
+commit 6f843ab560a3965cd66c7404776d1b908181d2b1
+Author: James Antill <james@and.org>
+Date:   Fri Feb 18 14:18:49 2011 -0500
+
+    Pass any check-update arguments to "list obsoletes".
+
+diff --git a/yumcommands.py b/yumcommands.py
+index f196477..62b8746 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -626,13 +626,14 @@ class CheckUpdateCommand(YumCommand):
+         checkEnabledRepo(base)
+ 
+     def doCommand(self, base, basecmd, extcmds):
++        obscmds = ['obsoletes'] + extcmds
+         base.extcmds.insert(0, 'updates')
+         result = 0
+         try:
+             ypl = base.returnPkgLists(extcmds)
+             if (base.conf.obsoletes or
+                 base.verbose_logger.isEnabledFor(logginglevels.DEBUG_3)):
+-                typl = base.returnPkgLists(['obsoletes'])
++                typl = base.returnPkgLists(obscmds)
+                 ypl.obsoletes = typl.obsoletes
+                 ypl.obsoletesTuples = typl.obsoletesTuples
+ 

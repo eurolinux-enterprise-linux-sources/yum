@@ -1,0 +1,54 @@
+commit 47b07cd12e16cdc82f9b63667f32647e41cb3381
+Author: James Antill <james@and.org>
+Date:   Thu Aug 4 09:52:34 2011 -0400
+
+    Make "yum -q history addon-info last saved_tx" valid input for load-ts.
+
+diff --git a/output.py b/output.py
+index da34382..00e0e6f 100755
+--- a/output.py
++++ b/output.py
+@@ -2349,12 +2349,12 @@ to exit.
+         
+         for item in extcmds[2:]:
+             if item in addon_info:
+-                print '%s:' % item
+-                print self.history.return_addon_data(hist_data.tid, item)
++                self.verbose_logger.log(logginglevels.INFO_2, '%s:', item)
++                print self.history.return_addon_data(hist_data.tid, item),
++                self.verbose_logger.log(logginglevels.INFO_2, '')
+             else:
+                 print _('%s: No additional data found by this name') % item
+-
+-            print ''
++            self.verbose_logger.log(logginglevels.INFO_2, '')
+ 
+     def historyPackageListCmd(self, extcmds):
+         """ Shows the user a list of data about the history, from the point
+commit 72102db9b92a97ad35231fd4106a896e66516acf
+Author: James Antill <james@and.org>
+Date:   Thu Aug 4 10:06:29 2011 -0400
+
+    Accept old outputs of "-q history addon-info saved_tx" in load_ts. BZ 728253
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index fe312ce..530bfd4 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -5318,6 +5318,16 @@ class YumBase(depsolve.Depsolve):
+         # 3+numrepos = num pkgs
+         # 3+numrepos+1 -> EOF= txmembers
+         
++        if data[0] == 'saved_tx:\n':
++            #  Old versions of yum would put "saved_tx:" at the begining and
++            # two blank lines at the end when you used:
++            # "yum -q history addon-info saved_tx".
++            if data[-1] == 'history addon-info\n':
++                # Might as well also DTRT if they hand removed the plugins line
++                data = data[1:-3]
++            else:
++                data = data[1:-2]
++
+         # rpm db ver
+         rpmv = data[0].strip()
+         if rpmv != str(self.rpmdb.simpleVersion(main_only=True)[0]):

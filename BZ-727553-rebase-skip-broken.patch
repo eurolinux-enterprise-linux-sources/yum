@@ -1,0 +1,308 @@
+commit eeadab5beb419c6e884f30c04fda58ed1d05b538
+Author: Tim Lauridsen <timlau@fedoraproject.org>
+Date:   Sat Mar 5 13:55:09 2011 +0100
+
+    Add a unit test to make skip-broken go into endless loop when an installed
+    package conflict with an update.
+    Fix the cause by in depsolve by putting the conflicting po into the problem
+    tuple, so skip-broken knows what to remove from the transaction.
+    Also show the full package in the conflict message and not just the name.
+
+diff --git a/test/skipbroken-tests.py b/test/skipbroken-tests.py
+index 31482bc..36a4a6d 100644
+--- a/test/skipbroken-tests.py
++++ b/test/skipbroken-tests.py
+@@ -1,8 +1,11 @@
+ import unittest
+ import logging
+ import sys
++import re
+ from testbase import *
+ 
++REGEX_PKG = re.compile(r"(\d*):?(.*)-(.*)-(.*)\.(.*)$")
++
+ class SkipBrokenTests(DepsolveTests):
+     ''' Test cases to test skip-broken'''
+     
+@@ -20,6 +23,36 @@ class SkipBrokenTests(DepsolveTests):
+         po = FakePackage(name, version, release, epoch, arch, repo=self.repo)
+         self.rpmdb.addPackage(po)
+         return po
++
++    def _pkgstr_to_nevra(self, pkg_str):
++        '''
++        Get a nevra from from a epoch:name-version-release.arch string
++        @param pkg_str: package string
++        '''
++        res = REGEX_PKG.search(pkg_str)
++        if res:
++            (e,n,v,r,a) = res.groups()
++            if e == "": 
++                e = "0"
++            return (n,e,v,r,a)   
++        else: 
++            raise AttributeError("Illegal package string : %s" % pkg_str)
++
++    def repoString(self, pkg_str):
++        ''' 
++        Add an available package from a epoch:name-version-release.arch string
++        '''
++        (n,e,v,r,a) = self._pkgstr_to_nevra(pkg_str)
++        return self.repoPackage(n,v,r,e,a)   
++                
++            
++    def instString(self, pkg_str):
++        ''' 
++        Add an installed package from a epoch:name-version-release.arch string
++        '''
++        (n,e,v,r,a) = self._pkgstr_to_nevra(pkg_str)
++        return self.instPackage(n,v,r,e,a)   
++
+            
+     def testMissingReqNoSkip(self):
+         ''' install fails,  because of missing req.
+@@ -671,6 +704,35 @@ class SkipBrokenTests(DepsolveTests):
+         # uncomment this line and the test will fail and you can see the output
+         # self.assertResult([i1])
+         
++    def test_conflict_looping(self):
++        ''' 
++        Skip-broken is looping
++        https://bugzilla.redhat.com/show_bug.cgi?id=681806
++        '''
++        members = [] # the result after the transaction
++        # Installed package conflicts with u1
++        i0 = self.instString('kde-l10n-4.6.0-3.fc15.1.noarch')
++        i0.addConflicts('kdepim', 'GT', ('6', '4.5.9', '0'))
++        members.append(i0)
++        i1 = self.instString('6:kdepim-4.5.94.1-1.fc14.x86_64')
++        u1 = self.repoString('7:kdepim-4.4.10-1.fc15.x86_64')
++        self.tsInfo.addUpdate(u1, oldpo=i1)
++        # u1 should be removed, because of the conflict
++        members.append(i1)
++        i2 = self.instString('6:kdepim-libs-4.5.94.1-1.fc14.x86_64')
++        u2 = self.repoString('7:kdepim-libs-4.4.10-1.fc15.x86_64')
++        self.tsInfo.addUpdate(u2, oldpo=i2)
++        members.append(u2)
++        i3 = self.instString('kdepim-runtime-libs-4.5.94.1-2.fc14.x86_64')
++        u3 = self.repoString('1:kdepim-runtime-libs-4.4.10-2.fc15.x86_64')
++        self.tsInfo.addUpdate(u3, oldpo=i3)
++        members.append(u3)
++        i4 = self.instString('kdepim-runtime-4.5.94.1-2.fc14.x86_64')
++        u4 = self.repoString('1:kdepim-runtime-4.4.10-2.fc15.x86_64')
++        self.tsInfo.addUpdate(u4, oldpo=i4)
++        members.append(u4)
++        self.assertEquals('ok', *self.resolveCode(skip=True))
++        self.assertResult(members)
+     
+     
+     def resolveCode(self,skip = False):
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 8f18ccc..388811d 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -680,11 +680,12 @@ class Depsolve(object):
+         if len(self.tsInfo) != length and txmbrs:
+             return CheckDeps, errormsgs
+ 
+-        msg = '%s conflicts with %s' % (name, conflicting_po.name)
++        msg = '%s conflicts with %s' % (name, str(conflicting_po))
+         errormsgs.append(msg)
+         self.verbose_logger.log(logginglevels.DEBUG_1, msg)
+         CheckDeps = False
+-        self.po_with_problems.add((po,None,errormsgs[-1]))
++        # report the conflicting po, so skip-broken can remove it
++        self.po_with_problems.add((po,conflicting_po,errormsgs[-1]))
+         return CheckDeps, errormsgs
+ 
+     def _undoDepInstalls(self):
+commit e07978f754d4268ce7637af036fc0bde9f16c0b4
+Author: Tim Lauridsen <timlau@fedoraproject.org>
+Date:   Thu Mar 31 10:20:58 2011 +0200
+
+    Fix bugs in the skip-broken code, this should fix some of the weird cases where skip-broken fails today
+
+diff --git a/test/skipbroken-tests.py b/test/skipbroken-tests.py
+index 36a4a6d..812785a 100644
+--- a/test/skipbroken-tests.py
++++ b/test/skipbroken-tests.py
+@@ -733,6 +733,82 @@ class SkipBrokenTests(DepsolveTests):
+         members.append(u4)
+         self.assertEquals('ok', *self.resolveCode(skip=True))
+         self.assertResult(members)
++
++    def test_skipbroken_001(self):
++        ''' 
++        this will pass
++        https://bugzilla.redhat.com/show_bug.cgi?id=656057
++        '''
++        members = []
++        # Installed package conflicts with ux1
++        ix0 = self.instString('1:libguestfs-1.6.0-1.fc14.1.i686')
++        ix0.addRequires('/usr/lib/.libssl.so.1.0.0a.hmac')
++        members.append(ix0)
++        ix1 = self.instString('openssl-1.0.0a-2.fc14.i686')
++        ix1.addFile("/usr/lib/.libssl.so.1.0.0a.hmac")
++        ux1 = self.repoString('openssl-1.0.0b-1.fc14.i686')
++        ux1.addFile("/usr/lib/.libssl.so.1.0.0b.hmac")
++        self.tsInfo.addUpdate(ux1, oldpo=ix1)
++        members.append(ix1)
++        self.assertEquals('empty', *self.resolveCode(skip=True))
++        self.assertResult(members)
++
++
++    def test_skipbroken_002(self):
++        ''' 
++        this will pass
++        https://bugzilla.redhat.com/show_bug.cgi?id=656057
++        '''
++        members = []
++        # Installed package conflicts with ux1
++        ix0 = self.instString('1:libguestfs-1.6.0-1.fc14.1.i686')
++        ix0.addRequires('/usr/lib/.libssl.so.1.0.0a.hmac')
++        members.append(ix0)
++        ix1 = self.instString('openssl-1.0.0a-2.fc14.i686')
++        ix1.addFile("/usr/lib/.libssl.so.1.0.0a.hmac")
++        ux1 = self.repoString('openssl-1.0.0b-1.fc14.i686')
++        ux1.addFile("/usr/lib/.libssl.so.1.0.0b.hmac")
++        self.tsInfo.addUpdate(ux1, oldpo=ix1)
++        members.append(ix1)
++        # this is just junk to make the transaction big
++        i1 = self.instString('afoobar-0.4.12-2.fc12.noarch')
++        u1 = self.repoString('afoobar-0.4.14-1.fc14.noarch')
++        self.tsInfo.addUpdate(u1, oldpo=i1)
++        members.append(u1)
++        self.assertEquals('ok', *self.resolveCode(skip=True))
++        self.assertResult(members)
++
++    def test_skipbroken_003(self):
++        ''' 
++        this will fail, because of a bug in the skip-broken code.
++        it will remove the wrong package (zfoobar) instead of openssl.
++        the problem is that self._working_po is not set with the right value
++        when checking file requires for installed packages after the transaction
++        if resolved. (_resolveRequires)
++        if fails because self._working_po contains the last package processed in the transaction
++        zfoobar, so it will be removed.
++        https://bugzilla.redhat.com/show_bug.cgi?id=656057
++        
++        This should not fail anymore, after the the self._working_po is reset in depsolver
++        '''
++        members = []
++        # Installed package conflicts with ux1
++        ix0 = self.instString('1:libguestfs-1.6.0-1.fc14.1.i686')
++        ix0.addRequires('/usr/lib/.libssl.so.1.0.0a.hmac')
++        members.append(ix0)
++        ix1 = self.instString('openssl-1.0.0a-2.fc14.i686')
++        ix1.addFile("/usr/lib/.libssl.so.1.0.0a.hmac")
++        ux1 = self.repoString('openssl-1.0.0b-1.fc14.i686')
++        ux1.addFile("/usr/lib/.libssl.so.1.0.0b.hmac")
++        self.tsInfo.addUpdate(ux1, oldpo=ix1)
++        members.append(ix1)
++        # this is just junk to make the transaction big
++        i1 = self.instString('zfoobar-0.4.12-2.fc12.noarch')
++        u1 = self.repoString('zfoobar-0.4.14-1.fc14.noarch')
++        self.tsInfo.addUpdate(u1, oldpo=i1)
++        members.append(u1)
++        self.assertEquals('ok', *self.resolveCode(skip=True))
++        self.assertResult(members)
+     
+     
+     def resolveCode(self,skip = False):
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 60c572d..cf4d827 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -1125,6 +1125,9 @@ class YumBase(depsolve.Depsolve):
+             self.rpmdb.transactionReset()
+             self.installedFileRequires = None # Kind of hacky
+             self.verbose_logger.debug("SKIPBROKEN: ########### Round %i ################" , count)
++            if count == 30: # Failsafe, to avoid endless looping
++                self.verbose_logger.debug('SKIPBROKEN: Too many loops ')
++                break
+             self._printTransaction()        
+             depTree = self._buildDepTree()
+             startTs = set(self.tsInfo)
+@@ -1140,7 +1143,7 @@ class YumBase(depsolve.Depsolve):
+                 for skip in skipped:
+                     skipped_po.add(skip)
+                     # make sure we get the compat arch packages skip from pkgSack and up too.
+-                    if skip not in removed_from_sack and skip.repoid == 'installed':
++                    if skip not in removed_from_sack and skip.repoid != 'installed':
+                         _remove_from_sack(skip)
+             # Nothing was removed, so we still got a problem
+              # the first time we get here we reset the resolved members of
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 388811d..44ccfd7 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -350,6 +350,7 @@ class Depsolve(object):
+             providers = self.rpmdb.getProvides(needname, needflags, needversion)
+ 
+         for inst_po in providers:
++            self._working_po = inst_po # store the last provider
+             inst_str = '%s.%s %s:%s-%s' % inst_po.pkgtup
+             (i_n, i_a, i_e, i_v, i_r) = inst_po.pkgtup
+             self.verbose_logger.log(logginglevels.DEBUG_2,
+@@ -753,6 +754,7 @@ class Depsolve(object):
+ 
+ 
+             # check global FileRequires
++            self._working_po = None # reset the working po
+             if CheckRemoves:
+                 CheckRemoves = False
+                 for po, dep in self._checkFileRequires():
+@@ -766,6 +768,7 @@ class Depsolve(object):
+                     continue
+ 
+             # check Conflicts
++            self._working_po = None # reset the working po
+             if CheckInstalls:
+                 CheckInstalls = False
+                 for conflict in self._checkConflicts():
+commit ac09b3e92bc30ec2a8faa721dc37a814320c6a6f
+Author: Nick Jacek <njacek@redhat.com>
+Date:   Mon Jun 13 16:16:29 2011 -0400
+
+     Stops "Finished dependency resolution" from being printed multiple times
+    when --skip-broken is used. BZ 626569.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index a6c50b7..53c21bd 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -1184,7 +1184,7 @@ class YumBase(depsolve.Depsolve):
+                 else:
+                     self.verbose_logger.debug('SKIPBROKEN: resetting already resolved packages (no packages to skip)' )
+                     self.tsInfo.resetResolved(hard=True)
+-            rescode, restring = self.resolveDeps(True)
++            rescode, restring = self.resolveDeps(True, skipping_broken=True)
+             endTs = set(self.tsInfo)
+              # Check if tsInfo has changes since we started to skip packages
+              # if there is no changes then we got a loop.
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 44ccfd7..6d744c0 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -721,7 +721,7 @@ class Depsolve(object):
+         p.print_stats(20)
+         return rc
+ 
+-    def resolveDeps(self, full_check=True):
++    def resolveDeps(self, full_check=True, skipping_broken=False):
+ 
+         if not len(self.tsInfo):
+             return (0, [_('Success - empty transaction')])
+@@ -795,7 +795,11 @@ class Depsolve(object):
+                 txmbr.ts_state = 'i'
+                 txmbr.output_state = TS_INSTALL
+ 
+-        if self.dsCallback: self.dsCallback.end()
++        if self.dsCallback:
++            if not self.conf.skip_broken:
++                self.dsCallback.end()
++            elif not skipping_broken and not errors:
++                self.dsCallback.end()
+         self.verbose_logger.log(logginglevels.DEBUG_1, _('Dependency Process ending'))
+ 
+         self.tsInfo.changed = False

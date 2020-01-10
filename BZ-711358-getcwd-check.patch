@@ -1,0 +1,30 @@
+Check the current directory.  RPM chroot code needs open-able ".",
+and yum directory setup code calls getcwd().  If this fails,
+just move to "/".
+
+--- yummain.py.orig	2012-02-14 15:34:52.069619589 +0100
++++ yummain.py	2012-02-14 15:36:20.561313767 +0100
+@@ -101,6 +101,23 @@
+     logger = logging.getLogger("yum.main")
+     verbose_logger = logging.getLogger("yum.verbose.main")
+ 
++    # Try to open the current directory to see if we have 
++    # read and execute access. If not, chdir to /
++    try:
++        f = open(".")
++    except IOError, e:
++        if e.errno == errno.EACCES:
++            logger.critical(_('No read/execute access in current directory, moving to /'))
++            os.chdir("/")
++    else:
++        f.close()
++    try:
++        os.getcwd()
++    except OSError, e:
++        if e.errno == errno.ENOENT:
++            logger.critical(_('No getcwd() access in current directory, moving to /'))
++            os.chdir("/")
++
+     # our core object for the cli
+     base = cli.YumBaseCli()
+ 

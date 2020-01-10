@@ -1,0 +1,18 @@
+commit 9d50f6292ba8204d9b162bd205195b4629d88381
+Author: James Antill <james@and.org>
+Date:   Tue Dec 20 14:44:46 2011 -0500
+
+    With no arg. to clean, give the error and then fail. BZ 735333
+
+diff --git a/yumcommands.py b/yumcommands.py
+index 36b19b3..2cd0b96 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -142,6 +142,7 @@ def checkCleanArg(base, basecmd, extcmds):
+     if len(extcmds) == 0:
+         base.logger.critical(_('Error: clean requires an option: %s') % (
+             ", ".join(VALID_ARGS)))
++        raise cli.CliError
+ 
+     for cmd in extcmds:
+         if cmd not in VALID_ARGS:

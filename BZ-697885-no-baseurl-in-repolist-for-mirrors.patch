@@ -1,0 +1,19 @@
+commit b84f90c24148b44b2c615a8ccf07b50d7308c621
+Author: James Antill <james@and.org>
+Date:   Tue Apr 19 14:47:20 2011 -0400
+
+    Don't show first url for mirrors, if we are using baseurl. BZ 697885.
+
+diff --git a/yumcommands.py b/yumcommands.py
+index 8e148a9..d3014c5 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -982,7 +982,7 @@ class RepoListCommand(YumCommand):
+                     elif repo.mirrorlist:
+                         out += [base.fmtKeyValFill(_("Repo-mirrors : "),
+                                                    repo.mirrorlist)]
+-                    if enabled and repo.urls:
++                    if enabled and repo.urls and not baseurls:
+                         url = repo.urls[0]
+                         if len(repo.urls) > 1:
+                             url += ' (%d more)' % (len(repo.urls) - 1)

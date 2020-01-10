@@ -1,0 +1,66 @@
+commit 4fa613c3e48be427d9a1ec677ba33aa207630b54
+Author: James Antill <james@and.org>
+Date:   Tue Oct 29 14:58:01 2013 -0400
+
+    Add loop limit for depsolving. BZ 1017840.
+
+diff --git a/yum/config.py b/yum/config.py
+index 52e539d..17aa0ca 100644
+--- a/yum/config.py
++++ b/yum/config.py
+@@ -894,6 +894,9 @@ class YumConf(StartupConf):
+                                          'commands'),
+                                      mapper={'cmds'          : 'commands',
+                                              'default' :'users'})
++ 
++    depsolve_loop_limit = PositiveIntOption(100, names_of_0=["<forever>"])
++
+     _reposlist = []
+ 
+     def dump(self):
+diff --git a/yum/depsolve.py b/yum/depsolve.py
+index 7002205..8b438bb 100644
+--- a/yum/depsolve.py
++++ b/yum/depsolve.py
+@@ -869,7 +869,11 @@ class Depsolve(object):
+ 
+         if self.dsCallback: self.dsCallback.start()
+ 
++        depsolve_loop_count = 0
+         while True:
++            if depsolve_loop_count == (self.conf.depsolve_loop_limit or -1):
++                return (1, [_("Depsolving loop limit reached.")] + unique(errors))
++            depsolve_loop_count += 1
+ 
+             CheckDeps = True
+ 
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index cb7ab14..5c73a39 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -843,6 +843,13 @@ The origin LVM devices to use for snapshots. Wildcards and negation are allowed,
+ If set to true then yum will try to reset the nice value to zero, before
+ running an rpm transaction. Defaults to True.
+ 
++.IP
++\fBdepsolve_loop_limit\fR
++Set the number of times any attempt to depsolve before we just give up. This
++shouldn't be needed as yum should always solve or fail, however it has been
++observed that it can loop forever with very large system upgrades. Setting
++this to `0' (or "<forever>") makes yum try forever. Default is `100'.
++
+ 
+ .SH "[repository] OPTIONS"
+ .LP 
+diff --git a/test/testbase.py b/test/testbase.py
+index ce4a1dd..a31f7a6 100644
+--- a/test/testbase.py
++++ b/test/testbase.py
+@@ -65,6 +65,7 @@ class FakeConf(object):
+         self.protected_packages = []
+         self.protected_multilib = False
+         self.clean_requirements_on_remove = True
++        self.depsolve_loop_limit = 10
+ 
+ class FakeSack:
+     """ Fake PackageSack to use with FakeRepository"""

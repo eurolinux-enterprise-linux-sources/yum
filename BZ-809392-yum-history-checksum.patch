@@ -1,0 +1,19 @@
+commit 2216e1a8d352718e92ebb14ff57f9635d960c29c
+Author: James Antill <james@and.org>
+Date:   Thu Dec 1 13:09:29 2011 -0500
+
+    Fix _conv_pkg_state when calling with history as checksum. BZ 757736.
+
+diff --git a/yum/history.py b/yum/history.py
+index d27fa44..0a29059 100644
+--- a/yum/history.py
++++ b/yum/history.py
+@@ -426,7 +426,7 @@ class YumMergedHistoryTransaction(YumHistoryTransaction):
+     def _conv_pkg_state(pkg, state):
+         npkg = YumHistoryPackageState(pkg.name, pkg.arch,
+                                       pkg.epoch,pkg.version,pkg.release, state,
+-                                      pkg._history)
++                                      history=pkg._history)
+         npkg._checksums = pkg._checksums
+         npkg.done = pkg.done
+         if _sttxt2stcode[npkg.state] in TS_INSTALL_STATES:

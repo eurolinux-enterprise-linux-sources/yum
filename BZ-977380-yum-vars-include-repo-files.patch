@@ -1,0 +1,31 @@
+diff -up yum-3.2.29/yum/parser.py.old yum-3.2.29/yum/parser.py
+--- yum-3.2.29/yum/parser.py.old	2010-09-20 16:37:36.000000000 +0200
++++ yum-3.2.29/yum/parser.py	2014-05-20 10:31:43.301094337 +0200
+@@ -18,6 +18,8 @@ def varReplace(raw, vars):
+     @return: Input raw string with substituted values.
+     '''
+ 
++    if not vars:
++        return raw
+     done = []                      # Completed chunks to return
+ 
+     while raw:
+@@ -131,6 +133,7 @@ class ConfigPreProcessor:
+                              'Error parsing config %s: include must specify file to include.' % (self.name)
+                     else:
+                         # whooohoo a valid include line.. push it on the stack
++                        url = varReplace(url, self._vars)
+                         fo = self._pushfile( url )
+                 else:
+                     # check if the current line starts a new section
+@@ -146,9 +149,7 @@ class ConfigPreProcessor:
+         
+         # at this point we have a line from the topmost file on the stack
+         # or EOF if the stack is empty
+-        if self._vars:
+-            return varReplace(line, self._vars)
+-        return line
++        return varReplace(line, self._vars)
+     
+     
+     def _absurl( self, url ):

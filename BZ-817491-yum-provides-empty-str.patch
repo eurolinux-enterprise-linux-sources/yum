@@ -1,0 +1,28 @@
+From 73080dd51c32dc53bf18088f8d31933a08231aae Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zden=C4=9Bk=20Pavlas?= <zpavlas@redhat.com>
+Date: Wed, 9 May 2012 13:22:55 +0200
+Subject: [PATCH] Fix the 'yum provides ""' case.  BZ 817491.
+
+---
+ yum/__init__.py |    5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 7e67d20..8f20efa 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -3051,10 +3051,7 @@ class YumBase(depsolve.Depsolve):
+         def _arg_data(arg):
+             if not misc.re_glob(arg):
+                 isglob = False
+-                if arg[0] != '/':
+-                    canBeFile = False
+-                else:
+-                    canBeFile = True
++                canBeFile = arg.startswith('/')
+             else:
+                 isglob = True
+                 canBeFile = misc.re_filename(arg)
+-- 
+1.7.4.4
+

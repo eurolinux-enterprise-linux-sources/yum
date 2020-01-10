@@ -1,0 +1,19 @@
+diff -up yum-3.2.29/yum/repoMDObject.py.old yum-3.2.29/yum/repoMDObject.py
+--- yum-3.2.29/yum/repoMDObject.py.old	2010-10-08 17:25:22.000000000 +0200
++++ yum-3.2.29/yum/repoMDObject.py	2014-04-18 12:06:10.473446263 +0200
+@@ -225,7 +225,14 @@ class RepoMD:
+             for item in self.tags['repo']:
+                 tag = """   <repo>%s</repo>\n""" % (to_xml(item))
+                 tags += tag
+-            for (cpeid, item) in self.tags['distro']:
++            distro = self.tags['distro']
++            if isinstance(distro, dict):
++                lst = []
++                for cpeid in sorted(distro):
++                    for item in sorted(distro[cpeid]):
++                        lst.append((cpeid, item))
++                distro = lst
++            for (cpeid, item) in distro:
+                 itemlist = list(item) # frellingsets.
+                 if cpeid:
+                     tag = """   <distro cpeid="%s">%s</distro>\n""" % (

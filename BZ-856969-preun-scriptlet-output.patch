@@ -1,0 +1,11 @@
+diff -up yum-3.2.29/yum/rpmtrans.py.old yum-3.2.29/yum/rpmtrans.py
+--- yum-3.2.29/yum/rpmtrans.py.old	2014-05-30 12:53:31.000000000 +0200
++++ yum-3.2.29/yum/rpmtrans.py	2014-05-30 12:57:40.066081925 +0200
+@@ -575,6 +575,7 @@ class RPMTransaction:
+                 msg = ("Non-fatal %s scriptlet failure in rpm package %s" % 
+                        (scriptlet_name, package_name))
+             self.display.errorlog(msg)
++            self._scriptout(package_name)
+             # FIXME - what else should we do here? raise a failure and abort?
+     
+     def verify_txmbr(self, txmbr, count):

@@ -1,0 +1,24 @@
+commit 222e44bbb3d96f0f6d4f61766c0f31f03c0496b9
+Author: James Antill <james@and.org>
+Date:   Wed Aug 24 17:03:58 2011 -0400
+
+    Fix problems with using old generated data (groups/pkgtag/updateinfo).
+
+diff --git a/yum/misc.py b/yum/misc.py
+index 37c572b..04490a6 100644
+--- a/yum/misc.py
++++ b/yum/misc.py
+@@ -1114,10 +1114,12 @@ def decompress(filename, dest=None, fn_only=False, check_timestamps=False):
+         if check_timestamps:
+             fi = stat_f(filename)
+             fo = stat_f(out)
+-            if fi and fo and fo.st_mtime > fi.st_mtime:
++            if fi and fo and fo.st_mtime == fi.st_mtime:
+                 return out
+ 
+         _decompress_chunked(filename, out, ztype)
++        if check_timestamps and fi:
++            os.utime(out, (fi.st_mtime, fi.st_mtime))
+         
+     return out
+     

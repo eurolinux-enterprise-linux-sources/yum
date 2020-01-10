@@ -1,0 +1,25 @@
+commit 6549b355f93473e7adc8ae177bb65ad2c0ba2dfc
+Author: James Antill <james@and.org>
+Date:   Fri Mar 16 11:12:59 2012 -0400
+
+    Fix UpdateNotice.getitem when asked for iteration, add contains. BZ 804120
+
+diff --git a/yum/update_md.py b/yum/update_md.py
+index 2cb1acb..7da6a08 100644
+--- a/yum/update_md.py
++++ b/yum/update_md.py
+@@ -79,8 +79,14 @@ class UpdateNotice(object):
+ 
+     def __getitem__(self, item):
+         """ Allows scriptable metadata access (ie: un['update_id']). """
++        if type(item) is int:
++            return sorted(self._md)[item]
+         return self._md.get(item) or None
+ 
++    def __contains__(self, item):
++        """ Allows quick tests for foo in blah. """
++        return item in self._md
++
+     def __setitem__(self, item, val):
+         self._md[item] = val
+ 

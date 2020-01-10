@@ -1,0 +1,61 @@
+commit 521d84d0e65b9743ed63b11c335466cd6ae25d01
+Author: Nick Jacek <njacek@redhat.com>
+Date:   Thu Jun 16 10:09:43 2011 -0400
+
+    If verifyTransaction detects that an install or removal was not successful, it will now set the output_state of the pkg to TS_FAILED. BZ 661962
+    
+    For the case of a removal, since the output_state will be TS_FAILED
+    rather than just remaining TS_ERASE, yum will now correctly say that
+    the removal failed instead of saying that the package was removed.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index a0c6b9d..d879c51 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -1589,6 +1589,7 @@ class YumBase(depsolve.Depsolve):
+                     # but raising an exception is not going to do any good
+                     self.logger.critical(_('%s was supposed to be installed' \
+                                            ' but is not!' % txmbr.po))
++                    txmbr.output_state = TS_FAILED
+                     continue
+                 po = self.getInstalledPackageObject(txmbr.pkgtup)
+                 rpo = txmbr.po
+@@ -1650,6 +1651,7 @@ class YumBase(depsolve.Depsolve):
+                         # but raising an exception is not going to do any good
+                         self.logger.critical(_('%s was supposed to be removed' \
+                                                ' but is not!' % txmbr.po))
++                        txmbr.output_state = TS_FAILED
+                         continue
+                 yumdb_item = self.rpmdb.yumdb.get_package(po=txmbr.po)
+                 yumdb_item.clean()
+commit a0910bf542ddc408ab2cdff932d2d58302db504a
+Author: James Antill <james@and.org>
+Date:   Thu Jun 16 10:55:12 2011 -0400
+
+    Add comments on TS_FAILED setting.
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index d879c51..8fa957f 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -1589,6 +1589,7 @@ class YumBase(depsolve.Depsolve):
+                     # but raising an exception is not going to do any good
+                     self.logger.critical(_('%s was supposed to be installed' \
+                                            ' but is not!' % txmbr.po))
++                    # Note: Get Panu to do te.Failed() so we don't have to
+                     txmbr.output_state = TS_FAILED
+                     continue
+                 po = self.getInstalledPackageObject(txmbr.pkgtup)
+@@ -1649,8 +1650,12 @@ class YumBase(depsolve.Depsolve):
+                                 output_states=TS_INSTALL_STATES):
+                         # maybe a file log here, too
+                         # but raising an exception is not going to do any good
++                        # Note: This actually triggers atm. because we can't
++                        #       always find the erased txmbr to set it when
++                        #       we should.
+                         self.logger.critical(_('%s was supposed to be removed' \
+                                                ' but is not!' % txmbr.po))
++                        # Note: Get Panu to do te.Failed() so we don't have to
+                         txmbr.output_state = TS_FAILED
+                         continue
+                 yumdb_item = self.rpmdb.yumdb.get_package(po=txmbr.po)

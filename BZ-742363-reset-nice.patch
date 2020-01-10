@@ -1,0 +1,61 @@
+commit b69dd197bd72175fdbe70f6b23a6f8971187e2a4
+Author: James Antill <james@and.org>
+Date:   Mon Oct 17 15:14:00 2011 -0400
+
+    Add reset_nice configuration.
+
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index 607e9fc..d6fe824 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -596,6 +622,10 @@ When installing/reinstalling/upgrading packages go through each package's
+ package then also mark them to be removed.
+ Boolean (1, 0, True, False, yes,no) Defaults to False
+ 
++.IP
++\fBreset_nice \fR
++If set to true then yum will try to reset the nice value to zero, before
++running an rpm transaction. Defaults to True.
+ 
+ 
+ .SH "[repository] OPTIONS"
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 53043de..3ede145 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -1603,10 +1603,23 @@ class YumBase(depsolve.Depsolve):
+                 pass
+         self._ts_save_file = None
+         
++        if self.conf.reset_nice:
++            onice = os.nice(0)
++            if onice:
++                try:
++                    os.nice(-onice)
++                except:
++                    onice = 0
++
+         errors = self.ts.run(cb.callback, '')
+         # ts.run() exit codes are, hmm, "creative": None means all ok, empty 
+         # list means some errors happened in the transaction and non-empty 
+         # list that there were errors preventing the ts from starting...
++        if self.conf.reset_nice:
++            try:
++                os.nice(onice)
++            except:
++                pass
+         
+         # make resultobject - just a plain yumgenericholder object
+         resultobject = misc.GenericHolder()
+diff --git a/yum/config.py b/yum/config.py
+index fffd0d1..f9789de 100644
+--- a/yum/config.py
++++ b/yum/config.py
+@@ -720,6 +720,7 @@ class YumConf(StartupConf):
+     '''
+     retries = PositiveIntOption(10, names_of_0=["<forever>"])
+     recent = IntOption(7, range_min=0)
++    reset_nice = BoolOption(True)
+ 
+     cachedir = Option('/var/cache/yum')
+ 

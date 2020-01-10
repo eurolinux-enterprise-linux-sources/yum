@@ -1,0 +1,22 @@
+commit 7498c0878a3f804c55236a1c2af8463dee4ead4a
+Author: Tim Lauridsen <timlau@fedoraproject.org>
+Date:   Tue Nov 29 13:11:43 2011 +0100
+
+    Fix pylint issue:
+    
+    ************* Module yum
+    E9905:4858:YumBase._ui_nevra_dict: Too many arguments for format string
+
+diff --git a/yum/__init__.py b/yum/__init__.py
+index b07bbb2..797838a 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -4855,7 +4855,7 @@ class YumBase(depsolve.Depsolve):
+         if e and v and r:
+             evr = '%s:%s-%s' % (e, v, r)
+         elif v and r:
+-            evr = '%s-%s' % (e, v, r)
++            evr = '%s-%s' % (v, r)
+         elif e and v:
+             evr = '%s:%s' % (e, v)
+         elif v: # e and r etc. is just too weird to print

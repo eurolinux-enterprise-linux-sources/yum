@@ -1,0 +1,21 @@
+commit 00bf0aa4ca1a5d1266dac8e25582c4a99196d077
+Author: Zdenek Pavlas <zpavlas@redhat.com>
+Date:   Mon Sep 2 15:27:12 2013 +0200
+
+    docs: $arch does not map 1:1 to uname(2) arch. BZ 1003554
+
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index fcacbae..90da81f 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -1145,8 +1145,8 @@ package.
+ 
+ .IP
+ \fB$arch\fR
+-This will be replaced with your architecture as listed by os.uname()[4] in
+-Python.
++This will be replaced with the architecture or your system
++as detected by yum.
+ 
+ .IP
+ \fB$basearch\fR

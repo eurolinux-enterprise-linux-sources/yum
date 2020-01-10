@@ -1,0 +1,19 @@
+commit f2e0794a58bd401e7132b3e50444a8b2b232c706
+Author: James Antill <james@and.org>
+Date:   Mon Nov 19 14:47:23 2012 -0500
+
+    Don't error in history list, when we have no history. BZ 802462.
+
+diff --git a/output.py b/output.py
+index 05b255e..885eb09 100755
+--- a/output.py
++++ b/output.py
+@@ -1973,6 +1973,8 @@ to exit.
+ 
+         tids, printall = self._history_list_transactions(extcmds)
+         if tids is None:
++            if not extcmds: # This is not a real error...
++                return 0, ['No accessible history to list']
+             return 1, ['Failed history list']
+ 
+         limit = 20

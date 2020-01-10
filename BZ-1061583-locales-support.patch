@@ -1,0 +1,36 @@
+diff -up yum-3.2.29/yum/i18n.py.fix yum-3.2.29/yum/i18n.py
+--- yum-3.2.29/yum/i18n.py.fix	2014-03-18 11:21:33.000000000 +0100
++++ yum-3.2.29/yum/i18n.py	2014-03-18 17:34:40.174078353 +0100
+@@ -483,14 +483,7 @@ def exception2msg(e):
+     return "<exception failed to convert to text>"
+ 
+ 
+-if True:
+-  # Python-2.* sucks for i18n/UnicodeErrors ... so we turn it off. We've
+-  # got most of the major stuff beaten in Fedora, so if you really want it
+-  # change the above to False and have fun (just don't log bugs).
+-  _ = dummy_wrapper
+-  P_ = dummyP_wrapper
+-else:
+-  try:
++try:
+     '''
+     Setup the yum translation domain and make _() and P_() translation wrappers
+     available.
+@@ -500,7 +493,15 @@ else:
+     t = gettext.translation('yum', fallback=True)
+     _ = t.ugettext
+     P_ = t.ungettext
+-  except:
++
++    # we describe yum commands and options with unicode but optparse
++    # mixes this with non-unicode translations so "yum --help" may fail.
++    # It's much easier to fix this in optparse than in yum. BZ 1033416
++    import optparse
++    if optparse._ is gettext.gettext:
++        #optparse._ = lambda msg: to_unicode(gettext.gettext(msg))
++        optparse._ = gettext.translation('messages', fallback=True).ugettext
++except:
+     '''
+     Something went wrong so we make a dummy _() wrapper there is just
+     returning the same text

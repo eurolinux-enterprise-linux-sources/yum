@@ -1,0 +1,108 @@
+diff -up yum-3.2.29/utils.py.old yum-3.2.29/utils.py
+--- yum-3.2.29/utils.py.old	2012-03-05 15:40:17.969548737 +0100
++++ yum-3.2.29/utils.py	2012-03-05 15:41:31.351894733 +0100
+@@ -21,7 +21,7 @@ import yum
+ from cli import *
+ from yum import Errors
+ from yum import _
+-from yum.i18n import utf8_width
++from yum.i18n import utf8_width, exception2msg
+ from yum import logginglevels
+ from optparse import OptionGroup
+ 
+@@ -129,27 +129,6 @@ def show_lock_owner(pid, logger):
+     return ps
+ 
+ 
+-def exception2msg(e):
+-    """ DIE python DIE! Which one works:
+-        to_unicode(e.value); unicode(e); str(e); 
+-        Call this so you don't have to care. """
+-    try:
+-        return to_unicode(e.value)
+-    except:
+-        pass
+-
+-    try:
+-        return unicode(e)
+-    except:
+-        pass
+-
+-    try:
+-        return str(e)
+-    except:
+-        pass
+-    return "<exception failed to convert to text>"
+-
+-
+ class YumUtilBase(YumBaseCli):
+     def __init__(self,name,ver,usage):
+         YumBaseCli.__init__(self)
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2012-03-05 15:40:49.161870662 +0100
++++ yum-3.2.29/yum/__init__.py	2012-03-05 15:42:38.432980770 +0100
+@@ -82,7 +82,7 @@ from packages import YumAvailablePackage
+ from packages import YumUrlPackage
+ from constants import *
+ from yum.rpmtrans import RPMTransaction,SimpleCliCallBack
+-from yum.i18n import to_unicode, to_str
++from yum.i18n import to_unicode, to_str, exception2msg
+ 
+ import string
+ import StringIO
+@@ -2048,7 +2048,7 @@ class YumBase(depsolve.Depsolve):
+                 done_repos.add(po.repoid)
+ 
+             except Errors.RepoError, e:
+-                adderror(po, str(e))
++                adderror(po, exception2msg(e))
+             else:
+                 po.localpath = mylocal
+                 if po in errors:
+diff -up yum-3.2.29/yum/i18n.py.old yum-3.2.29/yum/i18n.py
+--- yum-3.2.29/yum/i18n.py.old	2012-03-05 15:40:26.193579079 +0100
++++ yum-3.2.29/yum/i18n.py	2012-03-05 15:41:30.651977295 +0100
+@@ -462,6 +462,27 @@ def str_eq(a, b):
+     
+     return False
+     
++def exception2msg(e):
++    """ DIE python DIE! Which one works:
++        to_unicode(e.value); unicode(e); str(e); 
++        Call this so you don't have to care. """
++    try:
++        return to_unicode(e.value)
++    except:
++        pass
++
++    try:
++        return unicode(e)
++    except:
++        pass
++
++    try:
++        return str(e)
++    except:
++        pass
++    return "<exception failed to convert to text>"
++
++
+ if True:
+   # Python-2.* sucks for i18n/UnicodeErrors ... so we turn it off. We've
+   # got most of the major stuff beaten in Fedora, so if you really want it
+diff -up yum-3.2.29/yummain.py.old yum-3.2.29/yummain.py
+--- yum-3.2.29/yummain.py.old	2012-03-05 15:40:41.537769755 +0100
++++ yum-3.2.29/yummain.py	2012-03-05 15:41:47.167029157 +0100
+@@ -29,10 +29,10 @@ from yum import Errors
+ from yum import plugins
+ from yum import logginglevels
+ from yum import _
+-from yum.i18n import to_unicode, utf8_width
++from yum.i18n import to_unicode, utf8_width, exception2msg
+ import yum.misc
+ import cli
+-from utils import suppress_keyboard_interrupt_message, show_lock_owner, exception2msg
++from utils import suppress_keyboard_interrupt_message, show_lock_owner
+ 
+ def main(args):
+     """This does all the real work"""

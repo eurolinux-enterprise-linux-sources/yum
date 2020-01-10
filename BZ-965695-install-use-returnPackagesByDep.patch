@@ -1,0 +1,25 @@
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2014-05-20 10:36:14.000000000 +0200
++++ yum-3.2.29/yum/__init__.py	2014-05-20 10:46:23.294694278 +0200
+@@ -3159,6 +3159,10 @@ much more problems).
+                         raise Errors.YumBaseError, _('Invalid version flag from: %s') % str(depstring)
+                     depflags = SYMBOLFLAGS[flagsymbol]
+ 
++        if depflags is None: # This does wildcards...
++            return self.pkgSack.searchProvides(depstring)
++
++        # This does flags+versions, but no wildcards...
+         return self.pkgSack.getProvides(depname, depflags, depver).keys()
+ 
+     def returnPackageByDep(self, depstring):
+@@ -3210,6 +3214,10 @@ much more problems).
+                         raise Errors.YumBaseError, _('Invalid version flag from: %s') % str(depstring)
+                     depflags = SYMBOLFLAGS[flagsymbol]
+ 
++        if depflags is None: # This does wildcards...
++            return self.rpmdb.searchProvides(depstring)
++
++        # This does flags+versions, but no wildcards...
+         return self.rpmdb.getProvides(depname, depflags, depver).keys()
+ 
+     def _bestPackageFromList(self, pkglist, req=None):

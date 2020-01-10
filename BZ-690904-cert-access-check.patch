@@ -1,0 +1,82 @@
+commit a381302e6f2ee842dcfc9635df3990647d3aaf0e
+Author: James Antill <james@and.org>
+Date:   Tue Feb 14 16:05:50 2012 -0500
+
+    Try to workaround the case where non-root users can't read certs. BZ 690904.
+
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index 59bd779..babf66d 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -376,6 +376,15 @@ Path to the SSL client key yum should use to connect to repos/remote sites
+ Defaults to none.
+ 
+ .IP
++\fBssl_check_cert_permissions \fR
++Boolean - Whether yum should check the permissions on the paths for the
++certificates on the repository (both remote and local). If we can't read any of
++the files then yum will force skip_if_unavailable to be true.
++This is most useful for non-root processes which use yum on repos. that have
++client cert files which are readable only by root.
++Defaults to True.
++
++.IP
+ \fBhistory_record \fR
+ Boolean - should yum record history entries for transactions. This takes some
+ disk space, and some extra time in the transactions. But it allows how to know a
+@@ -843,6 +852,10 @@ repository.
+ Overrides the \fBsslclientkey\fR option from the [main] section for this
+ repository.
+ 
++.IP
++\fBssl_check_cert_permissions \fR
++Overrides the \fBssl_check_cert_permissions\fR option from the [main] section
++for this repository.
+ 
+ .IP
+ \fBmetadata_expire \fR
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 29305d2..9e18874 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -491,6 +491,20 @@ class YumBase(depsolve.Depsolve):
+             if validate and not validate(thisrepo):
+                 continue
+                     
++            if thisrepo.ssl_check_cert_permissions:
++                for fn in  (thisrepo.sslcacert,
++                            thisrepo.sslclientcert, thisrepo.sslclientkey):
++                    if not fn:
++                        continue
++                    #  If we can't read the SSL certs. we need to skip the repo.
++                    # if we don't have all the data.
++                    if not os.access(fn, os.R_OK):
++                        msg="Repo %s forced skip_if_unavailable=True due to: %s"
++                        if thisrepo.enabled:
++                            # Don't spam messages for disabled repos.
++                            self.logger.warning(msg % (thisrepo.id, fn))
++                        thisrepo.skip_if_unavailable = True
++
+             # Got our list of repo objects, add them to the repos
+             # collection
+             try:
+diff --git a/yum/config.py b/yum/config.py
+index 3beac89..fe7e1cb 100644
+--- a/yum/config.py
++++ b/yum/config.py
+@@ -837,6 +837,7 @@ class YumConf(StartupConf):
+     sslverify = BoolOption(True)
+     sslclientcert = Option()
+     sslclientkey = Option()
++    ssl_check_cert_permissions = BoolOption(True)
+ 
+     history_record = BoolOption(True)
+     history_record_packages = ListOption(['yum', 'rpm'])
+@@ -952,6 +953,7 @@ class RepoConf(BaseConfig):
+     sslverify = Inherit(YumConf.sslverify)
+     sslclientcert = Inherit(YumConf.sslclientcert)
+     sslclientkey = Inherit(YumConf.sslclientkey)
++    ssl_check_cert_permissions = Inherit(YumConf.ssl_check_cert_permissions)
+ 
+     skip_if_unavailable = BoolOption(False)
+     

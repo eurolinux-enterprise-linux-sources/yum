@@ -1,0 +1,19 @@
+commit bc5d77676c29be1c7f9161301084228003846b9a
+Author: James Antill <james@and.org>
+Date:   Tue Feb 14 15:40:51 2012 -0500
+
+    Generic provide markers for installonlypkgs. BZ 748054/748055/770444.
+
+diff --git a/yum/config.py b/yum/config.py
+index e0eee04..3beac89 100644
+--- a/yum/config.py
++++ b/yum/config.py
+@@ -741,6 +741,8 @@ class YumConf(StartupConf):
+     username = Option()
+     password = Option()
+     installonlypkgs = ListOption(['kernel', 'kernel-bigmem',
++                                  'installonlypkg(kernel-module)',
++                                  'installonlypkg(vm)',
+             'kernel-enterprise','kernel-smp', 'kernel-debug',
+             'kernel-unsupported', 'kernel-source', 'kernel-devel', 'kernel-PAE',
+             'kernel-PAE-debug'])

@@ -1,0 +1,21 @@
+commit fc22b9e9bf664d08d188570aa7dbccc502dccf91
+Author: Pradeep Kilambi <pkilambi@redhat.com>
+Date:   Mon Dec 17 15:39:34 2012 -0500
+
+    Include the update date if available in the generate updateinfo xml. BZ 887935.
+
+diff --git a/yum/update_md.py b/yum/update_md.py
+index e71f9ef..0f31c31 100644
+--- a/yum/update_md.py
++++ b/yum/update_md.py
+@@ -330,7 +330,9 @@ class UpdateNotice(object):
+                 to_xml(self._md['title']), to_xml(self._md['release']),
+                 to_xml(self._md['issued'], attrib=True),
+                 to_xml(self._md['description']))
+-
++        if self._md['updated']:
++            # include the updated date in the generated xml
++            msg += """  <updated date="%s"/>\n""" % (to_xml(self._md['updated'], attrib=True))
+         if self._md['summary']:
+             msg += """  <summary>%s</summary>\n""" % (to_xml(self._md['summary']))
+         if self._md['solution']:

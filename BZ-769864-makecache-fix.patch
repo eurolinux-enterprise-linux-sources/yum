@@ -1,0 +1,36 @@
+commit 9d5864d0ca61a607e6ed1778ecae0fee127ce753
+Author: Zdeněk Pavlas <zpavlas@redhat.com>
+Date:   Fri Jan 13 09:54:35 2012 +0100
+
+    Don't fail when pre-caching filelists. BZ 769864.
+    
+    populateSack() honors skip_if_unavailable
+    for 'all' and 'metadata' only.
+
+diff --git a/yumcommands.py b/yumcommands.py
+index d503585..b9d27f7 100644
+--- a/yumcommands.py
++++ b/yumcommands.py
+@@ -969,9 +969,7 @@ class MakeCacheCommand(YumCommand):
+             # we can't remove them until *LoadRepo() can do:
+             # 1. Download a .sqlite.bz2 and convert to .sqlite
+             # 2. Download a .xml.gz and convert to .xml.gz.sqlite
+-            base.repos.populateSack(mdtype='metadata', cacheonly=1)
+-            base.repos.populateSack(mdtype='filelists', cacheonly=1)
+-            base.repos.populateSack(mdtype='otherdata', cacheonly=1)
++            base.repos.populateSack(mdtype='all', cacheonly=1)
+ 
+ 
+         except yum.Errors.YumBaseError, e:
+diff -up yum-3.2.29/yumcommands.py.old yum-3.2.29/yumcommands.py
+--- yum-3.2.29/yumcommands.py.old	2012-04-03 15:41:05.569922575 +0200
++++ yum-3.2.29/yumcommands.py	2012-04-03 15:43:22.464956574 +0200
+@@ -557,8 +557,6 @@ class MakeCacheCommand(YumCommand):
+                 repo.mdpolicy = "group:all"
+             base.doRepoSetup(dosack=0)
+             base.repos.doSetup()
+-            for repo in base.repos.listEnabled():
+-                repo.repoXML
+             
+             # These convert the downloaded data into usable data,
+             # we can't remove them until *LoadRepo() can do:
