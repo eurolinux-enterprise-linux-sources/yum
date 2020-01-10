@@ -7,7 +7,7 @@
 Summary: RPM package installer/updater/manager
 Name: yum
 Version: 3.2.29
-Release: 73%{?dist}
+Release: 75%{?dist}
 License: GPLv2+
 Group: System Environment/Base
 Source0: http://yum.baseurl.org/download/3.2/%{name}-%{version}.tar.gz
@@ -166,6 +166,7 @@ Patch405: BZ-1211390-pkgmatch-epoch.patch
 Patch406: BZ-849177-ftp-disable-epsv.patch
 Patch407: BZ-1293385-proxy.patch
 Patch408: BZ-1206530-group-exit-status.patch
+Patch409: BZ-1307098-downloadonly-remove-tmp-files.patch
 
 URL: http://yum.baseurl.org/
 BuildArch: noarch
@@ -424,6 +425,7 @@ Install this package if you want auto yum updates nightly via cron.
 %patch406 -p1
 %patch407 -p1
 %patch408 -p1
+%patch409 -p1
 
 # Hack disable translation tests...
 cp /bin/true test/check-po-yes-no.py
@@ -562,6 +564,10 @@ exit 0
 # - Relates: rhbz#691283
 
 %changelog
+* Fri May 20 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-74
+- downloadonly: reliably remove lock and tmp files.
+- Resolves: bug#1337912
+
 * Wed Jan 06 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-73
 - Set exit code to 1 when trying to install a non-existent group.
 - Resolves: bug#1206530
