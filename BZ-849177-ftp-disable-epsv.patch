@@ -1,0 +1,56 @@
+diff -up yum-3.2.29/docs/yum.conf.5.old yum-3.2.29/docs/yum.conf.5
+--- yum-3.2.29/docs/yum.conf.5.old	2015-12-21 15:25:42.937176621 +0100
++++ yum-3.2.29/docs/yum.conf.5	2015-12-21 15:28:51.161749335 +0100
+@@ -321,6 +321,11 @@ with the \fBthrottle\fR option (above).
+ ignored. Default is `0' (no bandwidth throttling). 
+ 
+ .IP
++\fBftp_disable_epsv \fR
++This options disables Extended Passive Mode (the EPSV command) which does not
++work correctly on some buggy ftp servers. Default is `0' (EPSV enabled).
++
++.IP
+ \fBsslcacert \fR
+ Path to the directory containing the databases of the certificate authorities
+ yum should use to verify SSL certificates. Defaults to none - uses system
+@@ -794,6 +799,10 @@ repository.
+ Overrides the \fBbandwidth\fR option from the [main] section for this
+ repository.
+ 
++.IP
++\fBftp_disable_epsv\fR
++Overrides the \fBftp_disable_epsv\fR option from the [main] section
++for this repository.
+ 
+ .IP
+ \fBsslcacert \fR
+diff -up yum-3.2.29/yum/config.py.old yum-3.2.29/yum/config.py
+--- yum-3.2.29/yum/config.py.old	2015-12-21 15:29:19.693836150 +0100
++++ yum-3.2.29/yum/config.py	2015-12-21 15:31:20.725204414 +0100
+@@ -688,6 +688,7 @@ class YumConf(StartupConf):
+ 
+     bandwidth = BytesOption(0)
+     throttle = ThrottleOption(0)
++    ftp_disable_epsv = BoolOption(False)
+ 
+     http_caching = SelectionOption('all', ('none', 'packages', 'all'))
+     metadata_expire = SecondsOption(60 * 60 * 6) # Time in seconds (6h).
+@@ -838,6 +839,7 @@ class RepoConf(BaseConfig):
+     #       checksumming of the repomd.xml.
+     mdpolicy = Inherit(YumConf.mdpolicy)
+     cost = IntOption(1000)
++    ftp_disable_epsv = Inherit(YumConf.ftp_disable_epsv)
+     
+     sslcacert = Inherit(YumConf.sslcacert)
+     sslverify = Inherit(YumConf.sslverify)
+diff -up yum-3.2.29/yum/yumRepo.py.old yum-3.2.29/yum/yumRepo.py
+--- yum-3.2.29/yum/yumRepo.py.old	2015-12-21 15:31:33.060241947 +0100
++++ yum-3.2.29/yum/yumRepo.py	2015-12-21 15:32:00.266324727 +0100
+@@ -502,6 +502,7 @@ class YumRepository(Repository, config.R
+                  'user_agent': default_grabber.opts.user_agent,
+                  'username': self.username,
+                  'password': self.password,
++                 'ftp_disable_epsv': self.ftp_disable_epsv,
+                  }
+         return opts
+ 

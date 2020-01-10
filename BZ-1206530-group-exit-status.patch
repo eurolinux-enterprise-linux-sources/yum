@@ -1,0 +1,74 @@
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+--- yum-3.2.29/cli.py.old	2016-01-06 12:32:54.408860363 +0100
++++ yum-3.2.29/cli.py	2016-01-06 12:45:15.963345827 +0100
+@@ -700,6 +700,8 @@ class YumBaseCli(yum.YumBase, output.Yum
+                          # no matter what we don't go looking at repos
+             try:
+                 self.install(pattern=arg)
++            except yum.Errors.GroupInstallError, e:
++                self.verbose_logger.log(yum.logginglevels.INFO_2, e)
+             except yum.Errors.InstallError:
+                 self.verbose_logger.log(yum.logginglevels.INFO_2,
+                                         _('No package %s%s%s available.'),
+@@ -1276,6 +1278,7 @@ class YumBaseCli(yum.YumBase, output.Yum
+         
+         pkgs_used = []
+         
++        done = False
+         for group_string in grouplist:
+             group_matched = False
+             for group in self.comps.return_groups(group_string):
+@@ -1293,9 +1296,14 @@ class YumBaseCli(yum.YumBase, output.Yum
+             if not group_matched:
+                 self.logger.error(_('Warning: Group %s does not exist.'), group_string)
+                 continue
++            done = True
+             
+         if not pkgs_used:
+-            return 0, [_('No packages in any requested group available to install or update')]
++            exit_status = 1
++            if done:
++                # at least one group_string was a valid group
++                exit_status = 0
++            return exit_status, [_('No packages in any requested group available to install or update')]
+         else:
+             return 2, [_('%d Package(s) to Install') % len(pkgs_used)]
+ 
+diff -up yum-3.2.29/yum/Errors.py.old yum-3.2.29/yum/Errors.py
+--- yum-3.2.29/yum/Errors.py.old	2016-01-06 12:45:42.155435001 +0100
++++ yum-3.2.29/yum/Errors.py	2016-01-06 12:46:19.658562686 +0100
+@@ -94,6 +94,9 @@ class GroupsError(YumBaseError):
+ class InstallError(YumBaseError):
+     pass
+ 
++class GroupInstallError(InstallError):
++    pass
++
+ class UpdateError(YumBaseError):
+     pass
+     
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2016-01-06 13:17:33.911047018 +0100
++++ yum-3.2.29/yum/__init__.py	2016-01-06 13:28:17.316124124 +0100
+@@ -3411,13 +3411,15 @@ much more problems).
+         assert pattern[0] == '@'
+         group_string = pattern[1:]
+         tx_return = []
++
++        found = False
+         for group in self.comps.return_groups(group_string):
+-            try:
+-                txmbrs = self.selectGroup(group.groupid)
+-                tx_return.extend(txmbrs)
+-            except yum.Errors.GroupsError:
+-                self.logger.critical(_('Warning: Group %s does not exist.'), group_string)
+-                continue
++            found = True
++            txmbrs = self.selectGroup(group.groupid)
++            tx_return.extend(txmbrs)
++        if not found:
++            raise Errors.GroupInstallError, _('Warning: Group %s does not exist.') % group_string
++
+         return tx_return
+         
+     def _at_groupremove(self, pattern):

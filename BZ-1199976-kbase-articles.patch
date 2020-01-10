@@ -1,0 +1,64 @@
+diff -up yum-3.2.29/output.py.old yum-3.2.29/output.py
+--- yum-3.2.29/output.py.old	2015-10-13 12:30:56.721953601 +0200
++++ yum-3.2.29/output.py	2015-10-13 12:33:29.461312224 +0200
+@@ -304,6 +304,8 @@ class YumOutput:
+         self.term = YumTerm()
+         self._last_interrupt = None
+ 
++        self.reported_error_msgs = dict((k, False) for (k, v) in ERRORS_TO_KBASE_ARTICLES.iteritems())
++
+     
+     def printtime(self):
+         months = [_('Jan'), _('Feb'), _('Mar'), _('Apr'), _('May'), _('Jun'),
+@@ -318,7 +320,21 @@ class YumOutput:
+         
+         self.logger.error('%s: %s', errobj.url, errobj.exception)
+         self.logger.error(_('Trying other mirror.'))
++        self.suggestKBaseArticle(errobj)
+         raise errobj.exception
++
++    def suggestKBaseArticle(self, errobj):
++        errcode = None
++        if hasattr(errobj.exception, 'code') and errobj.exception.code in ERRORS_TO_KBASE_ARTICLES:
++            errcode = errobj.exception.code
++        elif hasattr(errobj.exception, 'errno') and errobj.exception.errno in ERRORS_TO_KBASE_ARTICLES:
++            errcode = errobj.exception.errno
++        if not errcode:
++            return
++
++        if not self.reported_error_msgs[errcode]:
++            self.logger.error(ERRORS_TO_KBASE_ARTICLES[errcode])
++            self.reported_error_msgs[errcode] = True
+     
+         
+     def simpleProgressBar(self, current, total, name=None):
+diff -up yum-3.2.29/yum/constants.py.old yum-3.2.29/yum/constants.py
+--- yum-3.2.29/yum/constants.py.old	2015-10-13 12:31:17.492002369 +0200
++++ yum-3.2.29/yum/constants.py	2015-10-13 12:34:28.994452005 +0200
+@@ -120,3 +120,26 @@ REPO_PROBLEM_METADATA=2
+ REPO_PROBLEM_COMPS=3
+ REPO_PROBLEM_OTHER=4
+ REPO_PROBLEM_PACKAGE=5
++
++
++ERRORS_TO_KBASE_ARTICLES = {
++    404: """To address this issue please refer to the below knowledge base article 
++
++https://access.redhat.com/articles/1320623
++
++If above article doesn't help to resolve this issue please open a ticket with Red Hat Support.
++""",
++    403: """To address this issue please refer to the below knowledge base article
++
++https://access.redhat.com/solutions/69319
++
++If above article doesn't help to resolve this issue please open a ticket with Red Hat Support.
++""",
++    60: """It was impossible to connect to the Red Hat servers.
++This could mean a connectivity issue in your environment, such as the requirement to configure a proxy,
++or a transparent proxy that tampers with TLS security, or an incorrect system clock.
++Please collect information about the specific failure that occurs in your environment,
++using the instructions in: https://access.redhat.com/solutions/1527033 and open a ticket with Red Hat Support.
++"""
++}
++

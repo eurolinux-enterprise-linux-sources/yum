@@ -1,0 +1,20 @@
+diff -up yum-3.2.29/docs/yum.conf.5.old yum-3.2.29/docs/yum.conf.5
+--- yum-3.2.29/docs/yum.conf.5.old	2015-12-15 15:43:41.225655626 +0100
++++ yum-3.2.29/docs/yum.conf.5	2015-12-15 15:44:28.051959595 +0100
+@@ -152,11 +152,11 @@ List of packages to exclude from updates
+ separated list.
+ Shell globs using wildcards (eg. * and ?) are allowed.
+ 
+-+.IP
+-+\fBquery_install_excludes\fR
+-+This applies the command line --exclude option (only, not the configuration
+-+exclude above) to installed packages being shown in some query commands
+-+(currently: list/info/search/provides).
++.IP
++\fBquery_install_excludes\fR
++This applies the command line --exclude option (only, not the configuration
++exclude above) to installed packages being shown in some query commands
++(currently: list/info/search/provides). Default is `0'.
+ 
+ .IP
+ \fBexactarch\fR

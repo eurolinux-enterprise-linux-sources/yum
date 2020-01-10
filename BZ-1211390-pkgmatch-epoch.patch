@@ -1,0 +1,12 @@
+diff -up yum-3.2.29/yum/rpmsack.py.old yum-3.2.29/yum/rpmsack.py
+--- yum-3.2.29/yum/rpmsack.py.old	2015-09-30 22:35:44.000000000 +0200
++++ yum-3.2.29/yum/rpmsack.py	2015-09-30 22:39:39.482234779 +0200
+@@ -578,7 +578,7 @@ class RPMDBPackageSack(PackageSackBase):
+             if repat.match(epoch + ":%(name)s-%(version)s-%(release)s.%(arch)s"
+                            % hdr):
+                 return True
+-            if repat.match("%(name)s-%(epoch)s:%(version)s-%(release)s.%(arch)s"
++            if repat.match(("%(name)s-" + epoch + ":%(version)s-%(release)s.%(arch)s")
+                            % hdr):
+                 return True
+         return False

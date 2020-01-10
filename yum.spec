@@ -7,7 +7,7 @@
 Summary: RPM package installer/updater/manager
 Name: yum
 Version: 3.2.29
-Release: 69%{?dist}
+Release: 73%{?dist}
 License: GPLv2+
 Group: System Environment/Base
 Source0: http://yum.baseurl.org/download/3.2/%{name}-%{version}.tar.gz
@@ -156,6 +156,17 @@ Patch352: BZ-1174612-assumeno.patch
 Patch353: BZ-1051931-required-size-round.patch
 Patch354: BZ-1200159-running-kernel-epoch.patch
 
+# RHEL-6.8
+Patch400: BZ-1199976-kbase-articles.patch 
+Patch401: BZ-1197245-api-missing-requires.patch
+Patch402: BZ-1271584-rpmdbpath.patch
+Patch403: BZ-1248715-man-query-install-excludes.patch
+Patch404: BZ-1225481-xml-traceback.patch
+Patch405: BZ-1211390-pkgmatch-epoch.patch
+Patch406: BZ-849177-ftp-disable-epsv.patch
+Patch407: BZ-1293385-proxy.patch
+Patch408: BZ-1206530-group-exit-status.patch
+
 URL: http://yum.baseurl.org/
 BuildArch: noarch
 BuildRequires: python
@@ -174,7 +185,7 @@ Conflicts: pirut < 1.1.4
 Requires: python >= 2.4, rpm-python, rpm >= 0:4.4.2
 Requires: python-iniparse
 Requires: python-sqlite
-Requires: python-urlgrabber >= 3.9.0-8
+Requires: python-urlgrabber >= 3.9.1-10
 Requires: yum-metadata-parser >= 1.1.0
 Requires: pygpgme
 
@@ -403,6 +414,17 @@ Install this package if you want auto yum updates nightly via cron.
 %patch353 -p1
 %patch354 -p1
 
+# RHEL-6.8
+%patch400 -p1
+%patch401 -p1
+%patch402 -p1
+%patch403 -p1
+%patch404 -p1
+%patch405 -p1
+%patch406 -p1
+%patch407 -p1
+%patch408 -p1
+
 # Hack disable translation tests...
 cp /bin/true test/check-po-yes-no.py
 
@@ -540,6 +562,34 @@ exit 0
 # - Relates: rhbz#691283
 
 %changelog
+* Wed Jan 06 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-73
+- Set exit code to 1 when trying to install a non-existent group.
+- Resolves: bug#1206530
+
+* Tue Dec 22 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-72
+- Add ftp_disable_epsv config option.
+- Resolves: bug#1293363
+- Honor proxy=_none_ set in yum.conf.
+- Resolves: bug#1293385
+
+* Tue Dec 15 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-71
+- Fix manpage for query_install_excludes option.
+- Resolves: bug#1248715
+- Don't traceback on xml parsing.
+- Resolves: bug#1225481
+- Respect epoch in package names.
+- Resolves: bug#1211390
+
+* Mon Dec 14 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-70
+- Add links to knowledge base articles.
+- Resolves: bug#1248686
+- Resolves: bug#1248687
+- Resolves: bug#1248690
+- Backport missing_requires to API.
+- Resolves: bug#1197245
+- Get correct rpmdb path from rpm configuration.
+- Resolves: bug#1271584
+
 * Thu Mar 19 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-69
 - Fix Obsoletes and Conflicts for yum-plugin-downloadonly.
 - Related: bug#1144503
