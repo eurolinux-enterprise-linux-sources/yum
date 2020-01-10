@@ -7,7 +7,7 @@
 Summary: RPM package installer/updater/manager
 Name: yum
 Version: 3.2.29
-Release: 75%{?dist}
+Release: 81%{?dist}
 License: GPLv2+
 Group: System Environment/Base
 Source0: http://yum.baseurl.org/download/3.2/%{name}-%{version}.tar.gz
@@ -166,7 +166,14 @@ Patch405: BZ-1211390-pkgmatch-epoch.patch
 Patch406: BZ-849177-ftp-disable-epsv.patch
 Patch407: BZ-1293385-proxy.patch
 Patch408: BZ-1206530-group-exit-status.patch
-Patch409: BZ-1307098-downloadonly-remove-tmp-files.patch
+
+# RHEL-6.9
+Patch430: BZ-1307098-downloadonly-remove-tmp-files.patch
+Patch431: BZ-1367861-remove-username-password.patch
+Patch432: BZ-1155687-fix-reget-simple-md-fnames.patch
+Patch433: BZ-1272828-list-obsoletes-identical.patch
+Patch434: BZ-1174380-fix-filelist-queries-for-dup-pkgs.patch
+Patch435: BZ-1269659-add-logging-for-bad-notice-dupes.patch
 
 URL: http://yum.baseurl.org/
 BuildArch: noarch
@@ -425,7 +432,14 @@ Install this package if you want auto yum updates nightly via cron.
 %patch406 -p1
 %patch407 -p1
 %patch408 -p1
-%patch409 -p1
+
+# RHEL-6.9
+%patch430 -p1
+%patch431 -p1
+%patch432 -p1
+%patch433 -p1
+%patch434 -p1
+%patch435 -p1
 
 # Hack disable translation tests...
 cp /bin/true test/check-po-yes-no.py
@@ -564,9 +578,35 @@ exit 0
 # - Relates: rhbz#691283
 
 %changelog
-* Fri May 20 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-74
+* Wed Dec 07 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-81
+- Remove nonexistent options from yum.conf man page.
+- Related: bug#1367861
+
+* Wed Nov 23 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-80
+- Fixed the invalid changelog entry.
+- Related: bug#1269659
+
+* Fri Nov 04 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-79
+- Add logging of bad update notice duplicates.
+- Resolves: bug#1269659
+
+* Mon Oct 31 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-78
+- sqlitesack: fix filelist queries for duplicate pkgs.
+- Resolves: bug#1389075
+
+* Wed Oct 26 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-77
+- Filter duplicate packages from different repos in doPackageLists(pkgnarrow='obsoletes').
+- Resolves: bug#1272828
+
+* Tue Oct 18 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-76
+- Remove "username" and "password" options from yum.conf man page.
+- Resolves: bug#1367861
+- Fix reget problems with simple md filenames.
+- Resolves: bug#1155687
+
+* Fri May 20 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-75
 - downloadonly: reliably remove lock and tmp files.
-- Resolves: bug#1337912
+- Resolves: bug#1307098
 
 * Wed Jan 06 2016 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-73
 - Set exit code to 1 when trying to install a non-existent group.

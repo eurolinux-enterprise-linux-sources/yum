@@ -1,0 +1,105 @@
+diff -up yum-3.2.29/yum/update_md.py.orig yum-3.2.29/yum/update_md.py
+--- yum-3.2.29/yum/update_md.py.orig	2016-11-02 17:48:58.671021923 +0100
++++ yum-3.2.29/yum/update_md.py	2016-11-02 17:50:27.302367814 +0100
+@@ -23,13 +23,16 @@ Update metadata (updateinfo.xml) parsing
+ 
+ import sys
+ 
+-from yum.i18n import utf8_text_wrap, to_utf8
++from yum.i18n import utf8_text_wrap, to_utf8, _
+ from yum.yumRepo import YumRepository
+ from yum.packages import FakeRepository
+ from yum.misc import to_xml, decompress, repo_gen_decompress
+ from yum.misc import cElementTree_iterparse as iterparse 
+ import Errors
+ 
++import logging
++import logginglevels
++
+ import rpmUtils.miscutils
+ from rpmUtils.arch import ArchStorage
+ 
+@@ -53,7 +56,7 @@ class UpdateNotice(object):
+     A single update notice (for instance, a security fix).
+     """
+ 
+-    def __init__(self, elem=None):
++    def __init__(self, elem=None, repoid=None, vlogger=None):
+         self._md = {
+             'from'             : '',
+             'type'             : '',
+@@ -78,6 +81,9 @@ class UpdateNotice(object):
+         if elem:
+             self._parse(elem)
+ 
++        self._repoid = repoid
++        self._vlogger = vlogger
++
+     def __getitem__(self, item):
+         """ Allows scriptable metadata access (ie: un['update_id']). """
+         if type(item) is int:
+@@ -98,6 +104,24 @@ class UpdateNotice(object):
+         #  Tests to see if it's "the same data", which means that the
+         # packages can be different (see add_notice).
+ 
++        def _rid(un):
++            if hasattr(un, '_repoid') and un._repoid is not None:
++                return un._repoid
++            else:
++                return '<unknown>'
++
++        def _log_failure(data):
++            """Log the mismatched data similarly to conflict markers in git."""
++            if self._vlogger is None:
++                return
++            msg = _('Duplicate of %s differs in some fields:\n')
++            msg %= other._md['update_id']
++            msg += '<<<<<<< %s:%s\n' % (_rid(other), data)
++            msg += '%r\n=======\n%r\n' % (other._md[data], self._md[data])
++            msg += '>>>>>>> %s:%s' % (_rid(self), data)
++            # --verbose mode enables this
++            self._vlogger.log(logginglevels.DEBUG_3, msg)
++
+         if not other or not hasattr(other, '_md'):
+             return False
+ 
+@@ -106,6 +130,7 @@ class UpdateNotice(object):
+                      'issued', 'updated', 'version', 'pushcount',
+                      'from', 'title', 'summary', 'description', 'solution'):
+             if self._md[data] != other._md[data]:
++                _log_failure(data)
+                 return False
+         return True
+ 
+@@ -394,6 +419,7 @@ class UpdateMetadata(object):
+         self._cache = {}    # a pkg nvr => notice cache for quick lookups
+         self._no_cache = {}    # a pkg name only => notice list
+         self._repos = []    # list of repo ids that we've parsed
++        self._vlogger = logging.getLogger("yum.verbose.update_md")
+         for repo in repos:
+             try: # attempt to grab the updateinfo.xml.gz from the repodata
+                 self.add(repo)
+@@ -519,12 +545,14 @@ class UpdateMetadata(object):
+         """ Parse a metadata from a given YumRepository, file, or filename. """
+         if not obj:
+             raise UpdateNoticeException
++        repoid = None
+         if type(obj) in (type(''), type(u'')):
+             unfile = decompress(obj)
+             infile = open(unfile, 'rt')
+ 
+         elif isinstance(obj, YumRepository):
+             if obj.id not in self._repos:
++                repoid = obj.id
+                 self._repos.append(obj.id)
+                 md = obj.retrieveMD(mdtype)
+                 if not md:
+@@ -539,7 +567,7 @@ class UpdateMetadata(object):
+         for event, elem in safe_iterparse(infile):
+             if elem.tag == 'update':
+                 try:
+-                    un = UpdateNotice(elem)
++                    un = UpdateNotice(elem, repoid, self._vlogger)
+                 except UpdateNoticeException, e:
+                     print >> sys.stderr, "An update notice is broken, skipping."
+                     # what else should we do?

@@ -1,0 +1,20 @@
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2016-10-26 13:35:37.518486851 +0200
++++ yum-3.2.29/yum/__init__.py	2016-10-26 13:36:35.951295735 +0200
+@@ -2510,9 +2510,13 @@ much more problems).
+                 (n,a,e,v,r) = pkgtup
+                 pkgs = self.pkgSack.searchNevra(name=n, arch=a, ver=v, rel=r, epoch=e)
+                 instpo = self.getInstalledPackageObject(instTup)
+-                for po in pkgs:
+-                    obsoletes.append(po)
+-                    obsoletesTuples.append((po, instpo))
++                if len(pkgs) > 1:
++                    self.verbose_logger.log(logginglevels.DEBUG_1,
++                        _('More than one identical match in sack for %s'),
++                        pkgs[0])
++                if len(pkgs) >= 1:
++                    obsoletes.append(pkgs[0])
++                    obsoletesTuples.append((pkgs[0], instpo))
+             if patterns:
+                 exactmatch, matched, unmatched = \
+                    parsePackages(obsoletes, patterns, casematch=not ignore_case)
