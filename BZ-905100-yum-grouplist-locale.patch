@@ -1,0 +1,23 @@
+commit 7738cfbffe3066fca4a6c8a514f9b56f09ab2eb3
+Author: James Antill <james@and.org>
+Date:   Fri May 27 16:24:34 2011 -0400
+
+    Work around RHEL-5 python broken getlocale() call. BZ 708292
+
+diff --git a/yum/misc.py b/yum/misc.py
+index b7e8534..2f6ddfe 100644
+--- a/yum/misc.py
++++ b/yum/misc.py
+@@ -998,7 +998,11 @@ def setup_locale(override_codecs=True, override_time=False):
+ 
+ 
+ def get_my_lang_code():
+-    mylang = locale.getlocale(locale.LC_MESSAGES)
++    try:
++        mylang = locale.getlocale(locale.LC_MESSAGES)
++    except ValueError, e:
++        # This is RHEL-5 python crack, Eg. en_IN can't be parsed properly
++        mylang = (None, None)
+     if mylang == (None, None): # odd :)
+         mylang = 'C'
+     else:

@@ -1,0 +1,278 @@
+commit e902a6859fb22c85e4954f199d4b72c965ddab31
+Author: James Antill <james@and.org>
+Date:   Thu Jul 14 11:37:29 2011 -0400
+
+    Add --assumeno which does the opposite of --assumeyes.
+
+diff --git a/cli.py b/cli.py
+index c69ec3b..7d332c1 100644
+--- a/cli.py
++++ b/cli.py
+@@ -25,7 +25,7 @@ import sys
+ import time
+ import random
+ import logging
+-from optparse import OptionParser,OptionGroup
++from optparse import OptionParser,OptionGroup,SUPPRESS_HELP
+ import rpm
+ 
+ from weakref import proxy as weakref
+@@ -491,7 +491,7 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+         
+         # confirm with user
+         if self._promptWanted():
+-            if not self.userconfirm():
++            if self.conf.assumeno or not self.userconfirm():
+                 self.verbose_logger.info(_('Exiting on user Command'))
+                 return -1
+ 
+@@ -1535,9 +1535,12 @@ class YumOptionParser(OptionParser):
+                 
+             # Handle remaining options
+             if opts.assumeyes:
+-                self.base.conf.assumeyes =1
++                self.base.conf.assumeyes = 1
++            if opts.assumeno:
++                self.base.conf.assumeno  = 1
++                self.base.conf.assumeyes = 0
+             self.base.conf.downloadonly = opts.dlonly
+             self.base.conf.downloaddir = opts.dldir
+ 
+             #  Instead of going cache-only for a non-root user, try to use a
+             # user writable cachedir. If that fails fall back to cache-only.
+@@ -1712,6 +1715,8 @@ class YumOptionParser(OptionParser):
+                         help=_("verbose operation"))
+         group.add_option("-y", "--assumeyes", dest="assumeyes",
+                 action="store_true", help=_("answer yes for all questions"))
++        group.add_option("--assumeno", dest="assumeno",
++                action="store_true", help=_("answer no for all questions"))
+         group.add_option("--version", action="store_true", 
+                 help=_("show Yum version and exit"))
+         group.add_option("--installroot", help=_("set install root"), 
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index 515aa73..d069f06 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -117,6 +117,14 @@ critical actions. Default is `0' (do prompt).
+ Command-line option: \fB\-y\fP
+ 
+ .IP
++\fBassumeno\fR
++Either `1' or `0'. If yum would prompt for confirmation of critical actions, 
++assume the user chose no. This is basically the same as doing "echo | yum ..."
++but is a bit more usable. Default is `0' (do prompt).
++.br
++Command-line option: \fB\--assumeno\fP
++
++.IP
+ \fBalwaysprompt\fR
+ Either `1' or `0'. Without this option, yum will not prompt for confirmation
+ when the list of packages to be installed exactly matches those given on the
+diff --git a/yum/__init__.py b/yum/__init__.py
+index e9bc1f9..8951cdc 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -4729,6 +4729,8 @@ class YumBase(depsolve.Depsolve):
+                     rc = False
+                     if self.conf.assumeyes:
+                         rc = True
++                    elif self.conf.assumeno:
++                        rc = False
+                         
+                     # grab the .sig/.asc for the keyurl, if it exists
+                     # if it does check the signature on the key
+@@ -4823,6 +4825,9 @@ class YumBase(depsolve.Depsolve):
+                     rc = False
+                     if self.conf.assumeyes:
+                         rc = True
++                    elif self.conf.assumeno:
++                        rc = False
++
+                     elif callback:
+                         rc = callback({"repo": repo, "userid": info['userid'],
+                                         "hexkeyid": info['hexkeyid'], "keyurl": keyurl,
+diff --git a/yum/config.py b/yum/config.py
+index dca13fa..dbf1784 100644
+--- a/yum/config.py
++++ b/yum/config.py
+@@ -664,6 +664,7 @@ class YumConf(StartupConf):
+     tsflags = ListOption()
+ 
+     assumeyes = BoolOption(False)
++    assumeno  = BoolOption(False)
+     alwaysprompt = BoolOption(True)
+     exactarch = BoolOption(True)
+     tolerant = BoolOption(True)
+commit fa63b661a1863ff1e13ae9083e2c2c5a74c00f7c
+Author: James Antill <james@and.org>
+Date:   Thu Jul 14 14:50:25 2011 -0400
+
+    Make the assume yes/no cmd. options and and config. options behave the same.
+
+diff --git a/cli.py b/cli.py
+index 7d332c1..74504c4 100644
+--- a/cli.py
++++ b/cli.py
+@@ -453,7 +453,7 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+         lsts = self.listTransaction()
+         if self.verbose_logger.isEnabledFor(yum.logginglevels.INFO_1):
+             self.verbose_logger.log(yum.logginglevels.INFO_1, lsts)
+-        elif not self.conf.assumeyes:
++        elif self.conf.assumeno or not self.conf.assumeyes:
+             #  If we are in quiet, and assumeyes isn't on we want to output
+             # at least the transaction list anyway.
+             self.logger.warn(lsts)
+@@ -623,7 +623,8 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+                 continue            
+ 
+             elif result == 1:
+-                if not sys.stdin.isatty() and not self.conf.assumeyes:
++                ay = self.conf.assumeyes and not self.conf.assumeno
++                if not sys.stdin.isatty() and not ay:
+                     raise yum.Errors.YumBaseError, \
+                             _('Refusing to automatically import keys when running ' \
+                             'unattended.\nUse "-y" to override.')
+@@ -1389,7 +1390,7 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+ 
+     def _promptWanted(self):
+         # shortcut for the always-off/always-on options
+-        if self.conf.assumeyes:
++        if self.conf.assumeyes and not self.conf.assumeno:
+             return False
+         if self.conf.alwaysprompt:
+             return True
+@@ -1538,9 +1539,8 @@ class YumOptionParser(OptionParser):
+                 self.base.conf.assumeyes = 1
+             if opts.assumeno:
+                 self.base.conf.assumeno  = 1
+-                self.base.conf.assumeyes = 0
+             self.base.conf.downloadonly = opts.dlonly
+             self.base.conf.downloaddir = opts.dldir
+
+             #  Instead of going cache-only for a non-root user, try to use a
+             # user writable cachedir. If that fails fall back to cache-only.
+diff --git a/docs/yum.8 b/docs/yum.8
+index 1a8202a..ea18f34 100644
+--- a/docs/yum.8
++++ b/docs/yum.8
+@@ -401,6 +401,11 @@ Assume yes; assume that the answer to any question which would be asked
+ is yes\&.
+ .br
+ Configuration Option: \fBassumeyes\fP
++.IP "\fB\-\-assumeno\fP"
++Assume no; assume that the answer to any question which would be asked 
++is no\&. This option overrides assumeyes, but is still subject to alwaysprompt.
++.br
++Configuration Option: \fBassumeno\fP
+ .IP "\fB\-c, \-\-config=[config file]\fP" 
+ Specifies the config file location - can take HTTP and FTP URLs and local file
+ paths\&.
+diff --git a/docs/yum.conf.5 b/docs/yum.conf.5
+index 3e229ea..bd86eea 100644
+--- a/docs/yum.conf.5
++++ b/docs/yum.conf.5
+@@ -114,13 +114,15 @@ are causing problems from the transaction.
+ Either `1' or `0'. Determines whether or not yum prompts for confirmation of
+ critical actions. Default is `0' (do prompt).
+ .br
+-Command-line option: \fB\-y\fP
++Command-line option: \fB\-y\fP \fB\--assumeyes\fP
+ 
+ .IP
+ \fBassumeno\fR
+ Either `1' or `0'. If yum would prompt for confirmation of critical actions, 
+ assume the user chose no. This is basically the same as doing "echo | yum ..."
+-but is a bit more usable. Default is `0' (do prompt).
++but is a bit more usable. This option overrides \fBassumeyes\fP, but is still
++subject to \fBalwaysprompt\fP.
++Default is `0' (do prompt).
+ .br
+ Command-line option: \fB\--assumeno\fP
+ 
+@@ -141,6 +143,7 @@ Either `1' or `0'. If enabled, then yum will be tolerant of errors on the
+ command line with regard to packages. For example: if you request to install
+ foo, bar and baz and baz is installed; yum won't error out complaining that baz
+ is already installed. Default to `0' (not tolerant).
++Note: This option currently does nothing.
+ .br
+ Command-line option: \fB\-t\fP
+ 
+diff --git a/yum/__init__.py b/yum/__init__.py
+index 8951cdc..12c2bdd 100644
+--- a/yum/__init__.py
++++ b/yum/__init__.py
+@@ -4727,10 +4727,10 @@ class YumBase(depsolve.Depsolve):
+                     # Try installing/updating GPG key
+                     self._getKeyImportMessage(info, keyurl)
+                     rc = False
+-                    if self.conf.assumeyes:
+-                        rc = True
+-                    elif self.conf.assumeno:
++                    if self.conf.assumeno:
+                         rc = False
++                    elif self.conf.assumeyes:
++                        rc = True
+                         
+                     # grab the .sig/.asc for the keyurl, if it exists
+                     # if it does check the signature on the key
+@@ -4823,10 +4823,10 @@ class YumBase(depsolve.Depsolve):
+                 if not key_installed:
+                     self._getKeyImportMessage(info, keyurl, keytype)
+                     rc = False
+-                    if self.conf.assumeyes:
+-                        rc = True
+-                    elif self.conf.assumeno:
++                    if self.conf.assumeno:
+                         rc = False
++                    elif self.conf.assumeyes:
++                        rc = True
+ 
+                     elif callback:
+                         rc = callback({"repo": repo, "userid": info['userid'],
+commit 1763a4e361cb6854a90a1c28b678e1a5744826d1
+Author: Ville Skyttä <ville.skytta@iki.fi>
+Date:   Sun Jul 17 22:37:25 2011 +0300
+
+    Add --assumeno to bash option completions.
+
+diff --git a/etc/yum.bash b/etc/yum.bash
+index 7fd97ae..2faeb59 100644
+--- a/etc/yum.bash
++++ b/etc/yum.bash
+@@ -75,8 +75,8 @@ _yum_baseopts()
+ {
+     local opts='--help --tolerant --cacheonly --config --randomwait
+         --debuglevel --showduplicates --errorlevel --rpmverbosity --quiet
+-        --verbose --assumeyes --version --installroot --enablerepo
++        --verbose --assumeyes --assumeno --version --installroot --enablerepo
+         --disablerepo --exclude --disableexcludes --obsoletes --noplugins
+         --nogpgcheck --skip-broken --color --releasever --setopt --downloadonly
+         --downloaddir'
+     [[ $COMP_LINE == *--noplugins* ]] || \
+commit d88286ca555fb23eae001ea507f0d558d1d90ad4
+Author: James Antill <james@and.org>
+Date:   Tue Jul 19 14:51:56 2011 -0400
+
+    Output the yum_save file on assumeno and gpg sig. fails.
+
+diff --git a/yummain.py b/yummain.py
+index e17f1e3..d6abd70 100755
+--- a/yummain.py
++++ b/yummain.py
+@@ -238,9 +238,15 @@ def main(args):
+         rpmdb_warn_checks()
+         return_code = result
+         if base._ts_save_file:
+-            verbose_logger.info(_("Your transaction was saved, rerun it with: yum load-transaction %s") % base._ts_save_file)
++            verbose_logger.info(_("Your transaction was saved, rerun it with:\n yum load-transaction %s") % base._ts_save_file)
+     elif return_code < 0:
+         return_code = 1 # Means the pre-transaction checks failed...
++        #  This includes:
++        # . No packages.
++        # . Hitting N at the prompt.
++        # . GPG check failures.
++        if base._ts_save_file:
++            verbose_logger.info(_("Your transaction was saved, rerun it with:\n yum load-transaction %s") % base._ts_save_file)
+     else:
+         verbose_logger.log(logginglevels.INFO_2, _('Complete!'))
+ 

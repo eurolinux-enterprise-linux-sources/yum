@@ -1,0 +1,20 @@
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+--- yum-3.2.29/cli.py.old	2015-03-17 11:30:05.000000000 +0100
++++ yum-3.2.29/cli.py	2015-03-17 11:31:19.394630332 +0100
+@@ -25,6 +25,7 @@ import sys
+ import time
+ import random
+ import logging
++import math
+ from optparse import OptionParser,OptionGroup,SUPPRESS_HELP
+ import rpm
+ 
+@@ -387,7 +388,7 @@ class YumBaseCli(yum.YumBase, output.Yum
+         p = re.compile('needs (\d+)(K|M)B on the (\S+) filesystem')
+         disk = {}
+         for m in p.finditer(errstring):
+-            size_in_mb = int(m.group(1)) if m.group(2) == 'M' else round(int(m.group(1))/1024.0, 3)
++            size_in_mb = int(m.group(1)) if m.group(2) == 'M' else math.ceil(int(m.group(1))/1024.0)
+             if m.group(3) not in disk:
+                 disk[m.group(3)] = size_in_mb
+             if disk[m.group(3)] < size_in_mb:

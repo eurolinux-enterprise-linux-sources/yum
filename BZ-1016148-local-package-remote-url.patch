@@ -1,0 +1,30 @@
+diff -up yum-3.2.29/yum/packages.py.old yum-3.2.29/yum/packages.py
+--- yum-3.2.29/yum/packages.py.old	2014-12-09 10:59:35.323045884 +0100
++++ yum-3.2.29/yum/packages.py	2014-12-09 11:11:45.977468559 +0100
+@@ -37,6 +37,7 @@ import errno
+ import struct
+ from constants import *
+ 
++import urllib
+ import urlparse
+ urlparse.uses_fragment.append("media")
+ from urlgrabber.grabber import URLGrabber, URLGrabError
+@@ -749,7 +750,7 @@ class YumAvailablePackage(PackageObject,
+ 
+     size = property(fget=lambda self: self._size())
+     remote_path = property(_remote_path)
+-    remote_url = property(_remote_url)
++    remote_url = property(lambda self: self._remote_url())
+ 
+     def _committer(self):
+         "Returns the name of the last person to do a commit to the changelog."
+@@ -1268,6 +1269,9 @@ class YumHeaderPackage(YumAvailablePacka
+         self.installedsize = _rpm_long_size_hack(self.hdr, 'size')
+         self.__mode_cache = {}
+         self.__prcoPopulated = False
++
++    def _remote_url(self):
++        return 'file://' + urllib.quote(os.path.abspath(self.localPkg()))
+         
+     def __str__(self):
+         if self.epoch == '0':

@@ -7,7 +7,7 @@
 Summary: RPM package installer/updater/manager
 Name: yum
 Version: 3.2.29
-Release: 60%{?dist}
+Release: 69%{?dist}
 License: GPLv2+
 Group: System Environment/Base
 Source0: http://yum.baseurl.org/download/3.2/%{name}-%{version}.tar.gz
@@ -137,6 +137,24 @@ Patch333: BZ-977380-fs-yumvars-documentation.patch
 Patch334: BZ-1102575-environment-vars-in-main-config.patch
 Patch335: BZ-861204-history-file-installroot.patch
 Patch336: BZ-1014993-history-info-manpage.patch
+Patch337: BZ-1155994-history-traceback.patch
+Patch338: BZ-905100-yum-grouplist-locale.patch
+Patch339: BZ-1016148-local-package-remote-url.patch
+Patch340: BZ-1051931-required-size.patch
+Patch341: BZ-893994-severity-release-updateinfo.patch
+Patch342: BZ-1181847-distrosync-traceback.patch
+Patch343: BZ-1171543-updateinfo-notice-when-arch-changed.patch
+Patch344: BZ-1144503-move-downloadonly-to-core.patch
+Patch345: BZ-1165783-f_stat-ENOTDIR.patch
+Patch346: BZ-1136212-check-provides-speedup.patch
+Patch347: BZ-952291-do-not-truncate-distro-tag.patch
+Patch348: BZ-887407-pkglist-tag.patch
+Patch349: BZ-1136105-protected-multilib-manpage.patch
+Patch350: BZ-1076076-rpm-script-start-stop-callbacks.patch
+Patch351: BZ-1154076-query-excludes.patch
+Patch352: BZ-1174612-assumeno.patch
+Patch353: BZ-1051931-required-size-round.patch
+Patch354: BZ-1200159-running-kernel-epoch.patch
 
 URL: http://yum.baseurl.org/
 BuildArch: noarch
@@ -201,6 +219,9 @@ Obsoletes: yum-plugin-protect-packages < 1.1.27-0
 Provides: yum-protect-packages = 1.1.27-0.yum
 Provides: yum-plugin-protect-packages = 1.1.27-0.yum
 Obsoletes: yum-plugin-download-order <= 0.2-2
+Obsoletes: yum-plugin-downloadonly < 3.2.29-62.yum
+Conflicts: yum-plugin-downloadonly < 3.2.29-62.yum
+Provides: yum-plugin-downloadonly = 3.2.29-62.yum
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 %description
@@ -227,7 +248,7 @@ can notify you when they are available via email, syslog or dbus.
 %package cron
 Summary: Files needed to run yum updates as a cron job
 Group: System Environment/Base
-Requires: yum >= 3.0 vixie-cron crontabs yum-plugin-downloadonly findutils
+Requires: yum >= 3.0 vixie-cron crontabs findutils
 Requires(post): /sbin/chkconfig
 Requires(post): /sbin/service
 Requires(preun): /sbin/chkconfig
@@ -363,6 +384,24 @@ Install this package if you want auto yum updates nightly via cron.
 %patch334 -p1
 %patch335 -p1
 %patch336 -p1
+%patch337 -p1
+%patch338 -p1
+%patch339 -p1
+%patch340 -p1
+%patch341 -p1
+%patch342 -p1
+%patch343 -p1
+%patch344 -p1
+%patch345 -p1
+%patch346 -p1
+%patch347 -p1
+%patch348 -p1
+%patch349 -p1
+%patch350 -p1
+%patch351 -p1
+%patch352 -p1
+%patch353 -p1
+%patch354 -p1
 
 # Hack disable translation tests...
 cp /bin/true test/check-po-yes-no.py
@@ -501,6 +540,64 @@ exit 0
 # - Relates: rhbz#691283
 
 %changelog
+* Thu Mar 19 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-69
+- Fix Obsoletes and Conflicts for yum-plugin-downloadonly.
+- Related: bug#1144503
+
+* Tue Mar 17 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-68
+- Make sure epoch is a string while checking for running kernel.
+- Resolves: bug#1200159
+
+* Tue Mar 17 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-67
+- Fix rounding issue in required disk space message.
+- Related: bug#1051931
+
+* Thu Mar 12 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-66
+- Bump the release.
+- Related: bug#1144503
+
+* Thu Mar 05 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-65
+- Add query_install_excludes conf./docs and use it for list/info/search/provides.
+- Resolves: bug#1154076
+- Add --assumeno option.
+- Resolves: bug#1174612
+- Fix Obsoletes and Conflicts for yum-plugin-downloadonly.
+- Related: bug#1144503
+
+* Tue Mar 03 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-64
+- Backport support for RPMCALLBACK_SCRIPT_START and RPMCALLBACK_SCRIPT_STOP callbacks.
+- Resolves: bug#1076076
+
+* Mon Mar 02 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-63
+- Also ignore ENOTDIR in stat_f.
+- Resolves: bug#1165783
+- Have check provides check directly against the rpm index, and then quit.
+- Resolves: bug#1136212
+- RepoMD.dump_xml: Do not truncate tag strings.
+- Resolves: bug#952291
+- Fix extra '</pkglist>' tags on multi-collection errata.
+- Resolves: bug#887407
+- Change protected_multilib man page entry.
+- Resolves: bug#1136105
+
+* Mon Mar 02 2015 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-62
+- Workaround history searching for [abc] character lists failures.
+- Resolves: bug#1155994
+- Work around python broken getlocale() call.
+- Resolves: bug#905100
+- Implement pkg.remote_url for YumLocalPackage.
+- Resolves: bug#1016148
+- Expect KB as well as MB in disk requirements message from rpm.
+- Resolves: bug#1051931
+- Add severity and release to updateinfo errata equality test.
+- Resolves: bug#893994
+- Init "found" variable for distro-sync full.
+- Resolves: bug#1181847
+- Show advisory even if package arch changed.
+- Resolves: bug#1171543
+- Move --downloadonly from plugin to core.
+- Resolves: bug#1144503
+
 * Thu Jul 10 2014 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.2.29-60
 - Fix yum manpage: move 'history info' description to its proper place.
 - Related: rhbz#1014993

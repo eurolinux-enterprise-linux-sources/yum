@@ -1,0 +1,18 @@
+commit 105237e3c0261eb3b63a11923a8dff53a17732e7
+Author: James Antill <james@and.org>
+Date:   Thu Dec 1 15:56:40 2011 -0500
+
+    Init "found" variable for distro-sync full. BZ 752407.
+
+diff --git a/cli.py b/cli.py
+index e939df6..d5dcfaf 100755
+--- a/cli.py
++++ b/cli.py
+@@ -966,6 +966,7 @@ class YumBaseCli(yum.YumBase, output.YumOutput):
+                         continue
+ 
+                     nayi = napkg.yumdb_info
++                    found = False
+                     for apkg in self.pkgSack.searchPkgTuple(napkg.pkgtup):
+                         if ('checksum_type' in nayi and
+                             'checksum_data' in nayi and

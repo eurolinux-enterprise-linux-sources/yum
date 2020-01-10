@@ -1,0 +1,96 @@
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+--- yum-3.2.29/cli.py.old	2015-01-21 10:25:26.444325426 +0100
++++ yum-3.2.29/cli.py	2015-01-21 10:20:22.038966730 +0100
+@@ -1468,6 +1468,8 @@ class YumOptionParser(OptionParser):
+             # Handle remaining options
+             if opts.assumeyes:
+                 self.base.conf.assumeyes =1
++            self.base.conf.downloadonly = opts.dlonly
++            self.base.conf.downloaddir = opts.dldir
+ 
+             #  Instead of going cache-only for a non-root user, try to use a
+             # user writable cachedir. If that fails fall back to cache-only.
+@@ -1675,6 +1677,10 @@ class YumOptionParser(OptionParser):
+                 help=_("control whether color is used"))
+         group.add_option("", "--releasever", dest="releasever", default=None, 
+                 help=_("set value of $releasever in yum config and repo files"))
++        group.add_option("--downloadonly", dest="dlonly", action="store_true",
++                help=_("don't update, just download"))
++        group.add_option("--downloaddir", dest="dldir", default=None,
++                help=_("specifies an alternate directory to store packages"))
+         group.add_option("", "--setopt", dest="setopts", default=[],
+                 action="append", help=_("set arbitrary config and repo options"))
+ 
+diff -up yum-3.2.29/docs/yum.8.old yum-3.2.29/docs/yum.8
+--- yum-3.2.29/docs/yum.8.old	2015-01-21 10:16:08.000000000 +0100
++++ yum-3.2.29/docs/yum.8	2015-01-21 10:26:45.876679967 +0100
+@@ -525,6 +525,12 @@ $releasever in your cachedir configurati
+ This option makes yum go slower, checking for things that shouldn't be possible
+ making it more tolerant of external errors.
+ .br
++.IP "\fB\-\-downloadonly\fP"
++Don't update, just download.
++.br
++.IP "\fB\-\-downloaddir=directory\fP"
++Specifies an alternate directory to store packages.
++.br
+ .IP "\fB\-\-setopt=option=value\fP"
+ Set any config option in yum config or repo files. For options in the global 
+ config just use: \-\-setopt=option=value for repo options use: \-\-setopt=repoid.option=value
+diff -up yum-3.2.29/etc/yum.bash.old yum-3.2.29/etc/yum.bash
+--- yum-3.2.29/etc/yum.bash.old	2015-01-21 10:16:08.000000000 +0100
++++ yum-3.2.29/etc/yum.bash	2015-01-21 10:32:39.194266597 +0100
+@@ -78,7 +78,8 @@ _yum_baseopts()
+         --debuglevel --showduplicates --errorlevel --rpmverbosity --quiet
+         --verbose --assumeyes --version --installroot --enablerepo
+         --disablerepo --exclude --disableexcludes --obsoletes --noplugins
+-        --nogpgcheck --skip-broken --color --releasever --setopt'
++        --nogpgcheck --skip-broken --color --releasever --setopt --downloadonly
++        --downloaddir'
+     [[ $COMP_LINE == *--noplugins* ]] || \
+         opts="$opts --disableplugin --enableplugin"
+     printf %s "$opts"
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2015-01-21 10:16:08.000000000 +0100
++++ yum-3.2.29/yum/__init__.py	2015-01-21 10:29:01.072283405 +0100
+@@ -21,6 +21,7 @@ The Yum RPM software updater.
+ import os
+ import os.path
+ import rpm
++import sys
+ 
+ def _rpm_ver_atleast(vertup):
+     """ Check if rpm is at least the current vertup. Can return False/True/None
+@@ -2013,6 +2014,7 @@ much more problems).
+         self.history.close()
+ 
+         self.plugins.run('predownload', pkglist=pkglist)
++        downloadonly = getattr(self.conf, 'downloadonly', False)
+         repo_cached = False
+         remote_pkgs = []
+         remote_size = 0
+@@ -2120,6 +2122,9 @@ much more problems).
+         if hasattr(urlgrabber.grabber, 'reset_curl_obj'):
+             urlgrabber.grabber.reset_curl_obj()
+ 
++        if downloadonly and not errors: # caller handles errors
++            self.verbose_logger.info(_('exiting because --downloadonly specified'))
++            sys.exit(self.exit_code)
+         return errors
+ 
+     def verifyHeader(self, fo, po, raiseError):
+diff -up yum-3.2.29/yum/repos.py.old yum-3.2.29/yum/repos.py
+--- yum-3.2.29/yum/repos.py.old	2015-01-21 10:16:08.000000000 +0100
++++ yum-3.2.29/yum/repos.py	2015-01-21 10:30:12.291601702 +0100
+@@ -100,6 +100,11 @@ class RepoStorage:
+             # so nothing else touches us
+             if not repo.enabled:
+                 self.disableRepo(repo.id)
++            else:
++                pkgdir = getattr(self.ayum.conf, 'downloaddir', None)
++                if pkgdir:
++                    repo.pkgdir = pkgdir
++
+                 
+         self._setup = True
+         self.ayum.plugins.run('postreposetup')

@@ -1,0 +1,12 @@
+diff -up yum-3.2.29/yum/update_md.py.old yum-3.2.29/yum/update_md.py
+--- yum-3.2.29/yum/update_md.py.old	2015-03-02 14:48:19.000000000 +0100
++++ yum-3.2.29/yum/update_md.py	2015-03-02 14:49:13.344152805 +0100
+@@ -374,7 +374,7 @@ class UpdateNotice(object):
+                                 pkg['epoch'] or '0',
+                                 to_xml(pkg['filename']))
+                 msg += """    </collection>\n"""
+-                msg += """  </pkglist>\n"""
++            msg += """  </pkglist>\n"""
+         msg += """</update>\n"""
+         return msg
+ 

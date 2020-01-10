@@ -1,0 +1,18 @@
+commit b52cecf339bd1731bcbfcc3243ba4f39242bb854
+Author: James Antill <james@and.org>
+Date:   Thu Jan 10 12:08:07 2013 -0500
+
+    Add severity and release to updateinfo errata equality test. BZ 893994
+
+diff --git a/yum/update_md.py b/yum/update_md.py
+index 3b22995..3ac0010 100644
+--- a/yum/update_md.py
++++ b/yum/update_md.py
+@@ -101,6 +101,7 @@ class UpdateNotice(object):
+             return False
+ 
+         for data in ('type', 'update_id', 'status', 'rights',
++                     'severity', 'release',
+                      'issued', 'updated', 'version', 'pushcount',
+                      'from', 'title', 'summary', 'description', 'solution'):
+             if self._md[data] != other._md[data]:

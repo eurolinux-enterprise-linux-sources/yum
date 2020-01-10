@@ -1,0 +1,19 @@
+commit 77a48466ae78e43440ebeb4b479a8c6c08666be9
+Author: James Antill <james@and.org>
+Date:   Wed May 25 15:07:34 2011 -0400
+
+    Also ignore ENOTDIR in stat_f. BZ 707422
+
+diff --git a/yum/misc.py b/yum/misc.py
+index 8e81c34..b7e8534 100644
+--- a/yum/misc.py
++++ b/yum/misc.py
+@@ -945,7 +945,7 @@ def stat_f(filename):
+     try:
+         return os.stat(filename)
+     except OSError, e:
+-        if e.errno != errno.ENOENT:
++        if e.errno not in (errno.ENOENT, errno.ENOTDIR):
+             raise
+         return None
+ 

@@ -1,0 +1,65 @@
+diff -up yum-3.2.29/yum/rpmtrans.py.old yum-3.2.29/yum/rpmtrans.py
+--- yum-3.2.29/yum/rpmtrans.py.old	2015-03-03 11:55:54.000000000 +0100
++++ yum-3.2.29/yum/rpmtrans.py	2015-03-03 11:59:16.435685370 +0100
+@@ -320,6 +319,21 @@ class RPMTransaction:
+             self._ts_done = None
+             misc.unlink_f(self.ts_done_fn)
+ 
++    # Find out txmbr based on the callback key. On erasures we dont know
++    # the exact txmbr but we always have a name, so return (name, txmbr)
++    # tuples so callers have less twists to deal with.
++    def _getTxmbr(self, cbkey):
++        if isinstance(cbkey, tuple):
++            pkgtup = self._dopkgtup(cbkey[0])
++            txmbrs = self.base.tsInfo.getMembers(pkgtup=pkgtup)
++            # if this is not one, somebody screwed up
++            assert len(txmbrs) == 1
++            return (txmbrs[0].name, txmbrs[0])
++        elif isinstance(cbkey, basestring):
++            return (cbkey, None)
++        else:
++            return (None, None)
++
+     def ts_done(self, package, action):
+         """writes out the portions of the transaction which have completed"""
+         
+@@ -448,6 +462,11 @@ class RPMTransaction:
+         # SCRIPT_ERROR is only in rpm >= 4.6.0
+         elif hasattr(rpm, "RPMCALLBACK_SCRIPT_ERROR") and what == rpm.RPMCALLBACK_SCRIPT_ERROR:
+             self._scriptError(bytes, total, h)
++        # SCRIPT_START and SCRIPT_STOP are only in rpm >= 4.10
++        elif hasattr(rpm, "RPMCALLBACK_SCRIPT_START") and what == rpm.RPMCALLBACK_SCRIPT_START:
++            self._scriptStart(bytes, total, h);
++        elif hasattr(rpm, "RPMCALLBACK_SCRIPT_STOP") and what == rpm.RPMCALLBACK_SCRIPT_STOP:
++            self._scriptStop(bytes, total, h);
+     
+     
+     def _transStart(self, bytes, total, h):
+@@ -609,6 +628,13 @@ class RPMTransaction:
+             self._scriptout(package_name)
+             # FIXME - what else should we do here? raise a failure and abort?
+     
++    def _scriptStart(self, bytes, total, h):
++        pass
++
++    def _scriptStop(self, bytes, total, h):
++        name, txmbr = self._getTxmbr(h)
++        self._scriptout(txmbr or name)
++
+     def verify_txmbr(self, txmbr, count):
+         " Callback for post transaction when we are in verifyTransaction(). "
+         if not hasattr(self.display, 'verify_txmbr'):
+diff -up yum-3.2.29/yum/__init__.py.old yum-3.2.29/yum/__init__.py
+--- yum-3.2.29/yum/__init__.py.old	2015-03-03 16:39:55.460196866 +0100
++++ yum-3.2.29/yum/__init__.py	2015-03-03 16:42:01.242534076 +0100
+@@ -1496,6 +1496,10 @@ much more problems).
+     def runTransaction(self, cb):
+         """takes an rpm callback object, performs the transaction"""
+ 
++        # On RHEL6 rpm doesn't emit RPMCALLBACK_SCRIPT_START and RPMCALLBACK_SCRIPT_STOP
++        # by default, need to define macro to enable them.
++        rpm.addMacro("_accept_script_stop_start_callbacks", "1")
++
+         self.plugins.run('pretrans')
+ 
+         #  We may want to put this other places, eventually, but for now it's

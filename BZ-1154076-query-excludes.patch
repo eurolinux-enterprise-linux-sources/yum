@@ -1,0 +1,92 @@
+diff -up yum-3.2.29/cli.py.old yum-3.2.29/cli.py
+--- yum-3.2.29/cli.py.old	2015-03-05 11:45:28.000000000 +0100
++++ yum-3.2.29/cli.py	2015-03-05 11:47:07.233788378 +0100
+@@ -1515,7 +1515,8 @@ class YumOptionParser(OptionParser):
+                 disable_excludes = []
+             self.base.conf.disable_excludes = disable_excludes
+ 
+-            for exclude in self._splitArg(opts.exclude):
++            self.base.cmdline_excludes = self._splitArg(opts.exclude)
++            for exclude in self.base.cmdline_excludes:
+                 try:
+                     excludelist = self.base.conf.exclude
+                     excludelist.append(exclude)
+diff -up yum-3.2.29/docs/yum.conf.5.old yum-3.2.29/docs/yum.conf.5
+--- yum-3.2.29/docs/yum.conf.5.old	2015-03-05 11:45:28.000000000 +0100
++++ yum-3.2.29/docs/yum.conf.5	2015-03-05 11:49:04.839410889 +0100
+@@ -141,6 +141,12 @@ List of packages to exclude from updates
+ separated list.
+ Shell globs using wildcards (eg. * and ?) are allowed.
+ 
+++.IP
+++\fBquery_install_excludes\fR
+++This applies the command line --exclude option (only, not the configuration
+++exclude above) to installed packages being shown in some query commands
+++(currently: list/info/search/provides).
++
+ .IP
+ \fBexactarch\fR
+ Either `1' or `0'. Set to `1' to make yum update only update the architectures
+diff -up yum-3.2.29/output.py.old yum-3.2.29/output.py
+--- yum-3.2.29/output.py.old	2015-03-05 11:45:28.000000000 +0100
++++ yum-3.2.29/output.py	2015-03-05 11:50:39.769933611 +0100
+@@ -875,6 +875,12 @@ class YumOutput:
+             If matchfor is passed, all the strings in that list will be
+             highlighted within the output.
+             verbose overrides logginglevel, if passed. """
++        if (po.repo.id == "installed" and
++            self.conf.query_install_excludes and self.cmdline_excludes):
++            # Very similar to _cmdline_exclude from yumcommands
++            e,m,u = yum.packages.parsePackages([po], self.cmdline_excludes)
++            if e or m:
++                return
+ 
+         if self.conf.showdupesfromrepos:
+             msg = '%s : ' % po
+diff -up yum-3.2.29/yumcommands.py.old yum-3.2.29/yumcommands.py
+--- yum-3.2.29/yumcommands.py.old	2015-03-05 11:45:28.000000000 +0100
++++ yum-3.2.29/yumcommands.py	2015-03-05 11:53:38.459917542 +0100
+@@ -32,6 +32,7 @@ import time
+ from yum.i18n import utf8_width, utf8_width_fill, to_unicode
+ 
+ import yum.config
++from yum.packages import parsePackages
+ 
+ def checkRootUID(base):
+     """
+@@ -284,6 +285,14 @@ def _list_cmd_calc_columns(base, ypl):
+     columns = base.calcColumns(data, remainder_column=1)
+     return (-columns[0], -columns[1], -columns[2])
+ 
++def _cmdline_exclude(pkgs, cmdline_excludes):
++    """ Do an extra exclude for installed packages that match the cmd line. """
++    if not cmdline_excludes:
++        return pkgs
++    e,m,u = parsePackages(pkgs, cmdline_excludes)
++    excluded = set(e + m)
++    return [po for po in pkgs if po not in excluded]
++
+ class InfoCommand(YumCommand):
+     def getNames(self):
+         return ['info']
+@@ -341,6 +350,9 @@ class InfoCommand(YumCommand):
+             clin = base.conf.color_list_installed_newer
+             clir = base.conf.color_list_installed_reinstall
+             clie = base.conf.color_list_installed_extra
++            if base.conf.query_install_excludes:
++                ypl.installed = _cmdline_exclude(ypl.installed,
++                                                 base.cmdline_excludes)
+             rip = base.listPkgs(ypl.installed, _('Installed Packages'), basecmd,
+                                 highlight_na=update_pkgs, columns=columns,
+                                 highlight_modes={'>' : clio, '<' : clin,
+diff -up yum-3.2.29/yum/config.py.old yum-3.2.29/yum/config.py
+--- yum-3.2.29/yum/config.py.old	2015-03-05 11:45:28.000000000 +0100
++++ yum-3.2.29/yum/config.py	2015-03-05 11:51:29.120205351 +0100
+@@ -694,6 +694,7 @@ class YumConf(StartupConf):
+     mirrorlist_expire = SecondsOption(60 * 60 * 24)
+     rpm_check_debug = BoolOption(True)
+     disable_excludes = ListOption()    
++    query_install_excludes = BoolOption(False)
+     skip_broken = BoolOption(False)
+     #  Note that "instant" is the old behaviour, but group:primary is very
+     # similar but better :).
