@@ -1,0 +1,37 @@
+--- yum-3.4.3/yum/constants.py.orig	2016-02-01 10:49:51.053969610 -0600
++++ yum-3.4.3/yum/constants.py	2016-02-01 10:58:53.067087179 -0600
+@@ -123,22 +123,21 @@ REPO_PROBLEM_PACKAGE=5
+ 
+ 
+ ERRORS_TO_KBASE_ARTICLES = {
+-    404: """To address this issue please refer to the below knowledge base article 
++    404: """This generally happens when your clien is unable to communicate with the repo server.
+ 
+-https://access.redhat.com/articles/1320623
++Please verify your connection works as expected.
+ 
+-If above article doesn't help to resolve this issue please open a ticket with Red Hat Support.
+ """,
+-    403: """To address this issue please refer to the below knowledge base article
++    403: """Your system is not authorized to use this resource.
+ 
+-https://access.redhat.com/solutions/69319
++Please contact the resource provider.
+ 
+-If above article doesn't help to resolve this issue please open a ticket with Red Hat Support.
+ """,
+-    60: """It was impossible to connect to the Red Hat servers.
+-This could mean a connectivity issue in your environment, such as the requirement to configure a proxy,
+-or a transparent proxy that tampers with TLS security, or an incorrect system clock.
+-Please collect information about the specific failure that occurs in your environment,
+-using the instructions in: https://access.redhat.com/solutions/1527033 and open a ticket with Red Hat Support.
++    60: """Something went wrong with the TLS handshake.
++
++Perhaps the server provided an unknown (self signed) CA certificate.
++
++Maybe your system's date and time are incorrect.
+ """
+-}
+\ No newline at end of file
++}
++

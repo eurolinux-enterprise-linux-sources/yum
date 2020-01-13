@@ -1,0 +1,12 @@
+--- yum-3.4.3/etc/yum-cron.conf.orig	2014-07-14 12:56:53.332089081 -0500
++++ yum-3.4.3/etc/yum-cron.conf	2014-07-14 12:58:31.244466099 -0500
+@@ -67,6 +67,9 @@ group_package_types = mandatory, default
+ [base]
+ # This section overrides yum.conf
+ 
++# Do not update these automatically
++exclude=kernel* openafs* *-kmdl-* kmod-* *firmware*
++
+ # Use this to filter Yum core messages
+ # -4: critical
+ # -3: critical+errors

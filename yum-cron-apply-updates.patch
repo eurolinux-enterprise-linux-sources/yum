@@ -1,0 +1,11 @@
+--- yum-3.4.3/etc/yum-cron.conf.orig	2014-07-14 12:56:53.332089081 -0500
++++ yum-3.4.3/etc/yum-cron.conf	2014-07-14 12:58:31.244466099 -0500
+@@ -17,7 +17,7 @@ download_updates = yes
+ 
+ # Whether updates should be applied when they are available.  Note
+ # that download_updates must also be yes for the update to be applied.
+-apply_updates = no
++apply_updates = yes
+ 
+ # Maximum amout of time to randomly sleep, in minutes.  The program
+ # will sleep for a random amount of time between 0 and random_sleep

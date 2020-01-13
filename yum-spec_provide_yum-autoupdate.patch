@@ -1,0 +1,11 @@
+--- yum.spec.orig	2014-07-21 09:53:56.974750889 -0500
++++ yum.spec	2014-07-21 09:54:28.662200456 -0500
+@@ -164,6 +164,8 @@ can notify you when they are available v
+ Summary: Files needed to run yum updates as a cron job
+ Group: System Environment/Base
+ Requires: yum >= 3.4.3-84 cronie crontabs findutils
++# For SL historic compatibility
++Provides:	yum-autoupdate
+ %if %{yum_cron_systemd}
+ BuildRequires: systemd-units
+ Requires(post): systemd

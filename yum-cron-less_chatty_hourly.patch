@@ -1,0 +1,11 @@
+--- yum-3.4.3/etc/yum-cron-hourly.conf.orig	2014-07-29 13:17:55.455827182 -0500
++++ yum-3.4.3/etc/yum-cron-hourly.conf	2014-07-29 13:18:01.015826066 -0500
+@@ -70,7 +70,7 @@ group_package_types = mandatory, default
+ # -4: critical
+ # -3: critical+errors
+ # -2: critical+errors+warnings (default)
+-debuglevel = -2
++debuglevel = -4
+ 
+ # skip_broken = True
+ mdpolicy = group:main
