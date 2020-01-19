@@ -32,7 +32,7 @@
 Summary: RPM package installer/updater/manager
 Name: yum
 Version: 3.4.3
-Release: 161%{?dist}
+Release: 154%{?dist}
 License: GPLv2+
 Group: System Environment/Base
 Source0: http://yum.baseurl.org/download/3.4/%{name}-%{version}.tar.gz
@@ -147,32 +147,10 @@ Patch257: BZ-1357083-clean-all-add-hint-rm-rf.patch
 Patch258: BZ-1370134-yum-check-ignore-self-conflicts.patch
 Patch259: BZ-1352585-detect-installed-provide.patch
 Patch260: BZ-1397829-fix-reget-simple-md-fnames.patch
-
-# rhel-7.5
-Patch280: BZ-1287610-fips-dont-pollute-stderr.patch
-Patch281: BZ-1358492-installonly-kernel.patch
-Patch282: BZ-1175315-dont-require-enabled-repos-for-url.patch
-Patch283: BZ-1386597-obsoletes-man-page.patch
-Patch284: BZ-1411575-manpage-typo.patch
-Patch285: BZ-1458841-preload-shared-libs.patch
-Patch286: BZ-1451817-docs-improve-payload-gpgcheck-opt.patch
-Patch287: BZ-1361609-improve-exactarchlist-opt.patch
-Patch288: BZ-1432319-add-usercache-opt.patch
-Patch289: BZ-1411692-docs-conf-var-naming-rules.patch
-Patch290: BZ-1278333-yum-shell-support-exit-status.patch
-
-# rhel-7.6
-Patch310: BZ-1520454-gpgkey-retry-broken-redirects.patch
-Patch311: BZ-1509831-baseurl-clarify-multiple-urls.patch
-Patch312: BZ-1528608-updateinfo-preload-pkgsack.patch
-Patch313: BZ-1477574-update-honor-multilib-policy-for-obsoletes.patch
-Patch314: BZ-1481220-print-disk-usage-on-yum-clean-all.patch
-Patch315: BZ-1480065-depsolve-filter-conflicting-provider.patch
-Patch316: BZ-1506890-logrotate-change-size-to-maxsize.patch
-Patch317:	yum-cron-excludes.patch
-Patch318:	yum-cron-apply-updates.patch
-Patch319:	yum-cron-less_chatty_hourly.patch
-Patch320:	debrand-yumerrors.patch
+Patch261:	yum-cron-excludes.patch
+Patch262:	yum-cron-apply-updates.patch
+Patch263:	yum-cron-less_chatty_hourly.patch
+Patch264:	debrand-yumerrors.patch
 
 URL: http://yum.baseurl.org/
 BuildArchitectures: noarch
@@ -404,34 +382,12 @@ Install this package if you want auto yum updates nightly via cron.
 %patch259 -p1
 %patch260 -p1
 
-# rhel-7.5
-%patch280 -p1
-%patch281 -p1
-%patch282 -p1
-%patch283 -p1
-%patch284 -p1
-%patch285 -p1
-%patch286 -p1
-%patch287 -p1
-%patch288 -p1
-%patch289 -p1
-%patch290 -p1
-
-# rhel-7.6
-%patch310 -p1
-%patch311 -p1
-%patch312 -p1
-%patch313 -p1
-%patch314 -p1
-%patch315 -p1
-%patch316 -p1
-
 # Do distro config. changes after everything else.
 %patch1 -p1
-%patch317 -p1
-%patch318 -p1
-%patch319 -p1
-%patch320 -p1
+%patch261 -p1
+%patch262 -p1
+%patch263 -p1
+%patch264 -p1
 
 %build
 make
@@ -660,10 +616,7 @@ exit 0
 %endif
 
 %changelog
-* Thu Dec 13 2018 Aleksander Baranowski <aleksander.baranowski@euro-linux.com> 3.4.3-161
-- Modify BZ-1175309-enable-repos-instruction.patch patch for EuroLinux branding.
-
-* Tue Oct 30 2018 Scientific Linux Auto Patch Process <SCIENTIFIC-LINUX-DEVEL@LISTSERV.FNAL.GOV>
+* Wed Aug 02 2017 Scientific Linux Auto Patch Process <SCIENTIFIC-LINUX-DEVEL@LISTSERV.FNAL.GOV>
 - Added Patch: yum-cron-less_chatty_hourly.patch
 -->  only report critical errors in yum-cron-hourly
 - Added Source: yum-spec_provide_yum-autoupdate.patch
@@ -672,65 +625,10 @@ exit 0
 -->  Don't just download, also apply updates
 - Added Source: yum.ini
 -->  Config file for automated patch script
-- Removed Patch: BZ-1175309-enable-repos-instruction.patch
--->  Remove patch containing subscription-manager branding
 - Added Patch: debrand-yumerrors.patch
 -->  Remove upstream branding of the yum errors
 - Added Patch: yum-cron-excludes.patch
 -->  Enable updates by default for non-kernel rpms
-
-* Wed Aug 15 2018 Michal Domonkos <mdomonko@redhat.com> - 3.4.3-161
-- Improve retry logic for gpg keys
-- Resolves: bug#1520454
-
-* Mon Jul 16 2018 Michal Domonkos <mdomonko@redhat.com> - 3.4.3-160
-- Only print full disk usage in verbose mode on "yum clean all"
-- Resolves: bug#1481220
-
-* Fri Jun 22 2018 Michal Domonkos <mdomonko@redhat.com> - 3.4.3-159
-- Retry on gpgkey timeout from MirrorManager
-- Resolves: bug#1520454
-- docs: baseurl: clarify multiple URLs
-- Resolves: bug#1509831
-- updateinfo: preload pkgSack
-- Resolves: bug#1528608
-- update(): honor multilib_policy for obsoletes
-- Resolves: bug#1477574
-- Print a disk usage summary on "yum clean all" and clarify docs
-- Resolves: bug#1481220
-- depsolve: filter out conflicting provider
-- Resolves: bug#1480065
-- Change 'size' option to 'maxsize' in yum.logrotate
-- Resolves: bug#1506890
-
-* Sun Nov 26 2017 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.4.3-158
-- Add support for yum-shell exit status.
-- Resolves: bug#1278333
-
-* Fri Nov 03 2017 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.4.3-157
-- docs: clarify variable name matching.
-- Resolves: bug#1411692
-
-* Wed Nov 01 2017 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.4.3-156
-- Preload shared libs that we may dlopen().
-- Resolves: bug#1458841
-- Update payload_gpgcheck documentation.
-- Resolves: bug#1451817
-- Make exactarchlist support wildcards and add docs.
-- Resolves: bug#1361609
-- Add usercache config option.
-- Resolves: bug#1432319
-
-* Thu Oct 06 2017 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.4.3-155
-- Don't pollute stderr in FIPS mode.
-- Resolves: bug#1287610
-- Don't require enabled repos for URL installs.
-- Resolves: bug#1175315
-- installonlypkgs: add "installonlypkg(kernel)
-- Resolves: bug#1358492
-- Manpage fixes.
-- Resolves: bug#1386597
-- Resolves: bug#1411575
 
 * Mon Mar 27 2017 Valentina Mukhamedzhanova <vmukhame@redhat.com> - 3.4.3-154
 - Add payload_gpgcheck option.
